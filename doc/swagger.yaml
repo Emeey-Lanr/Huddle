@@ -1,0 +1,28 @@
+openapi:3.0.0
+info:
+ title: My API
+ version:1.0.0
+ description:API documentaion
+servers:
+ - url : http//localhost:8
+ paths:
+  /ping:
+  get:
+   summary:Ping example
+   description:Return pong
+   tags:
+    - example
+   responses:
+       '200':
+       description:Return example
+       content:
+        application/json:
+          schema:
+          type: object
+          properties:
+          id:
+          type:interger
+          exmaple:39dje8i3je93
+          username:
+           type: string
+           example:Emeey
