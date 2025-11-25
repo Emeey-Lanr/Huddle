@@ -1,9 +1,7 @@
 package router
 
 import (
-	middlware "huddle/pkg/middleware"
-
-	"huddle/pkg/controller"
+    "huddle/pkg/controller"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -12,9 +10,9 @@ import (
 
 
 func UserRouter (r *gin.Engine, db *gorm.DB){
-    user := controller.Base{Db: db}
+    user := &controller.Base{Db: db}
 
-	userGroup := r.Group("/user", middlware.AuthoriseUser)
+	userGroup := r.Group("/user")
    
   {
 	userGroup.POST("/signup", user.Signup)

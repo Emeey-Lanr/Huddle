@@ -2,7 +2,11 @@ package main
 
 import (
 	"huddle/db/connection"
-	"huddle/setup"
+	"huddle/pkg/router"
+
+	"github.com/joho/godotenv"
+	"log"
+	
 )
 
 
@@ -11,7 +15,15 @@ import (
 
 func main (){
  
+ err := godotenv.Load()	
+ if err != nil{
+	log.Println(err, "unable to load env")
+ }
+
+
 db :=	connection.ConnectToDb()
 
-setup.RoutesSetup(db)
+r :=  router.RoutesSetup(db)
+
+r.Run(":8080")
 }

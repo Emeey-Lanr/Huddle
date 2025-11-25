@@ -1,8 +1,8 @@
-package setup
+package router
 
 import (
 	"huddle/doc"
-	routes "huddle/pkg/router"
+	
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -12,21 +12,23 @@ import (
 
 
 
-func RoutesSetup (db *gorm.DB) {
+func RoutesSetup (db *gorm.DB) *gin.Engine{
 
 	r := gin.Default()
 
-	
-
+	// Entry Route
 	r.GET("/", func(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, gin.H{"name":"Welcome to Emeey API"})
 	})
-   routes.UserRouter(r, db)
 
-  doc.SwaggerDocs(r)//serves app docs and swagger ui
+	//All Routes
+    UserRouter(r, db)
+
+ // //serves app docs and swagger ui
+  doc.SwaggerDocs(r)
 
 
 
-	r.Run(":8080")
+	return r
    
 }

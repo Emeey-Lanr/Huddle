@@ -1,9 +1,10 @@
 package connection
 
 import (
+	"fmt"
+	"log"
 	"os"
 	"time"
-	"log"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
@@ -14,8 +15,15 @@ import (
 
 
 func ConnectToDb () *gorm.DB {
-dsn :=  os.Getenv("")
+
+host := os.Getenv("DB_HOST") 
+user := os.Getenv("DB_USER")
+password:= os.Getenv("DB_PASSWORD")
+dbName:= os.Getenv("DB_NAME")
+port := os.Getenv("DB_PORT")
+dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable", host, user, password, dbName, port )
 	
+log.Println(dsn)
 db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 	NamingStrategy: schema.NamingStrategy{
 		SingularTable: true, //cancels pularization
@@ -25,9 +33,10 @@ db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 })
 
 if err != nil{
-	log.Println("Unable to connect to db")
+	panic("Unable to connect to db"+ err.Error())
 }
 
+log.Println("DB connected")
 
 return db
 }
