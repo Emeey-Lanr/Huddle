@@ -16,6 +16,7 @@ func UserRouter (r *gin.Engine, db *gorm.DB){
    
   {
 	userGroup.POST("/signup", user.Signup)
+	userGroup.POST("/signin", user.Signin)
   }
 
 

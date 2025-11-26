@@ -17,19 +17,21 @@ type Base struct {
 	Password string
 }
 
-func (b *Base) CheckIfUserExist() *utility.AppError {
+func (b *Base) CheckIfUserExist() (model.Users, *utility.AppError ){
 	var userFound model.Users
 	err := b.Db.Where("email = ? OR name = ?", b.Email, b.Name).First(&userFound).Error
 
-  if err == nil{
-	return &utility.AppError{Status: http.StatusForbidden , Message:"Email or Name already exist", Err: err}
-  } 
-
+ 
   if errors.Is(err, gorm.ErrRecordNotFound){
-	return nil
+	return userFound,  nil
   }
 
-  return nil
+   if err == nil{
+	return userFound, &utility.AppError{Status: http.StatusForbidden , Message:"Email or Name already exist", Err: err}
+  } 
+
+
+  return userFound, nil
 
 }
 
@@ -43,4 +45,15 @@ func(b *Base) HashPassword()(string, *utility.AppError){
 	}
 
 	return string(hashedPassword), nil
+}
+
+
+func (b *Base) VerifyPassword (hashedPassword string) *utility.AppError{
+    err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(b.Password))
+
+	if err != nil {
+        return &utility.AppError{Status: http.StatusBadRequest, Message: "Invalid email or password", Err: err}
+	}
+
+	return nil
 }

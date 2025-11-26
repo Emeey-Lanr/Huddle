@@ -1,28 +1,25 @@
-openapi:3.0.0
+openapi: 3.0.3
 info:
- title: My API
- version:1.0.0
- description:API documentaion
+ title: Auth Wallet
+ Version: 1.0.0
+
 servers:
- - url : http//localhost:8
- paths:
-  /ping:
-  get:
-   summary:Ping example
-   description:Return pong
-   tags:
-    - example
+- url: http://localhost:8080
+
+paths:
+ /users/signup:
+  post:
+   summary: Create a new user
+   requestBody:
+     required: true
+     content:
+      application/json:
+       schema:
+       $ref: './doc/schema.yaml#/Signup'
    responses:
-       '200':
-       description:Return example
-       content:
-        application/json:
-          schema:
-          type: object
-          properties:
-          id:
-          type:interger
-          exmaple:39dje8i3je93
-          username:
-           type: string
-           example:Emeey
+    '201':
+      description: User Created successfully
+      content:
+      application/json:
+      schema:
+       $ref: './doc/schema.yaml#/SignupResp'

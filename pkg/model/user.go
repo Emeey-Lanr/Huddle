@@ -11,6 +11,13 @@ type Users struct {
 	Name      string `json:"name" validate:"required"`
 	Email     string `json:"email" validate:"required,email"`
 	Password  string `json:"password" validate:"required,gte=6"`
-	Wallet    int    `json:"wallet"`
+	Wallet    float64    `json:"wallet" `
 	CreatedAt time.Time `json:"created_at" gorm:"column:created_at"`
 }
+
+
+type Signin struct {
+	Email string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required"`
+}
+

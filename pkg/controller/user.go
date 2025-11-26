@@ -44,3 +44,34 @@ func (base *Base) Signup (c *gin.Context){
 	c.JSON(http.StatusCreated, gin.H{"message":"user created succesfully","token":token})
 	
 }
+
+
+
+func (base *Base) Signin (c *gin.Context){
+	var req model.Signin
+
+	if err := c.ShouldBindJSON(&req); err != nil{
+		c.JSON(http.StatusBadRequest, gin.H{"message":"Inavlid request"})
+		return
+	}
+
+	if err := utility.Validate.Struct(&req); err != nil{
+      errMsg := utility.ValidationErrors(err)
+	  c.JSON(http.StatusBadRequest, errMsg)
+	  return
+	}
+
+   
+	token, err := services.Signin(base.Db, req)
+	
+	if err != nil {
+		log.Println()
+		c.JSON(err.Status, gin.H{"message":err.Message})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message":"Login succesfull", "token":token})
+
+
+
+}
