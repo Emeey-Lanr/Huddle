@@ -6,6 +6,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"log"
+
 	
 )
 
@@ -22,8 +23,9 @@ func main (){
 
 
 db :=	connection.ConnectToDb()
+rdb := connection.ConnectToRedis()
 
-r :=  router.RoutesSetup(db)
+r :=  router.RoutesSetup(db, rdb)
 
 r.Run(":8080")
 }

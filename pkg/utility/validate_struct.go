@@ -10,24 +10,27 @@ import (
 var Validate = validator.New()
 
 
-func ValidationErrors (err error)map[string]string {
+func ValidationErrors (err error)(map[string]string, string) {
 	 errors := make(map[string]string)
+	 var ms *string
 	 for _, e := range err.(validator.ValidationErrors){
-		var msg string
-		m := &msg
+		var msg *string
+		
+		
 		switch e.Tag() {
 		case "required":
-			*m = fmt.Sprintf("%s is required", e.Field())
+			*msg = fmt.Sprintf("%s is required", e.Field())
 		case "email":
-			*m = "Invalid email format"
+			*msg = "Invalid email format"
 		case "gte":
-			*m = fmt.Sprintf("Password length should be at least %s", e.Param())
+			*msg = fmt.Sprintf("Password length should be at least %s", e.Param())
 		}
 
-		errors[e.Field()] = msg
+		*ms += fmt.Sprintf("-%v",*msg)
+		errors[e.Field()] = *msg
 	 }
 
-	 return errors
+	 return errors, *ms
 }
 
 

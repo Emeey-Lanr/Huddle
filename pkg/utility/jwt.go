@@ -1,7 +1,6 @@
 package utility
 
 import (
-	"net/http"
 	"time"
 
 	"os"
@@ -12,11 +11,11 @@ import (
 
 var secretKey = []byte(os.Getenv("SECRET_KEY"))
 
-func CreateToken (id uuid.UUID, email string) (string, *AppError) {
+func CreateToken (id uuid.UUID, email string) (string, error) {
 	claims := jwt.MapClaims{
 		"user_id": id,
 		"email":email,
-		"exp":time.Now().Add(time.Hour * 24).Unix(),
+		"exp":time.Now().Add(time.Hour * 1).Unix(),
 	}
 
   token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -24,7 +23,7 @@ func CreateToken (id uuid.UUID, email string) (string, *AppError) {
    signedToken, err := token.SignedString(secretKey)
 
    if err != nil{
-	return "", &AppError{Status: http.StatusInternalServerError, Message:"An error occured", Err: err}
+	return "", err
    }
 
    return signedToken, nil
