@@ -1,7 +1,8 @@
 package utility
 
 import (
-	
+	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/go-playground/validator/v10"
@@ -10,27 +11,29 @@ import (
 var Validate = validator.New()
 
 
-func ValidationErrors (err error)(map[string]string, string) {
-	 errors := make(map[string]string)
-	 var ms *string
+func ValidationErrors (err error)(error) {
+	 errorsMap := make(map[string]string)
+
 	 for _, e := range err.(validator.ValidationErrors){
-		var msg *string
+		var msg string
 		
 		
 		switch e.Tag() {
 		case "required":
-			*msg = fmt.Sprintf("%s is required", e.Field())
+			msg = fmt.Sprintf("%s is required", e.Field())
 		case "email":
-			*msg = "Invalid email format"
-		case "gte":
-			*msg = fmt.Sprintf("Password length should be at least %s", e.Param())
+			msg = "Invalid email format"
+		case "min":
+			msg = fmt.Sprintf("Password length should be at least %s characters", e.Param())
 		}
 
-		*ms += fmt.Sprintf("-%v",*msg)
-		errors[e.Field()] = *msg
+		
+		errorsMap[e.Field()] = msg
 	 }
 
-	 return errors, *ms
+	 b, _ := json.Marshal(errorsMap)
+	 
+	  return errors.New(string(b))
 }
 
 

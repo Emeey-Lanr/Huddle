@@ -12,14 +12,19 @@ import (
 )
 
 func AdminSignup(db *gorm.DB, req model.Admins) (string, *utility.AppError) {
-	adminExist, _ := helper.CheckIfAdminExist(req.Email, req.Username, db)
-	if !adminExist {
-		return "", &utility.AppError{StatusCode:http.StatusForbidden,  Message:"User alredy exist", Err: errors.New("User already exists") }
+	admin, helperErr := helper.CheckIfAdminExist(req.Email, req.Username, db)
+   
+	if admin.Email == "" && helperErr != nil {
+		return "", helperErr
+	}
+
+	if admin.Email != "" && helperErr == nil {
+       return "", &utility.AppError{StatusCode: http.StatusUnauthorized, Message: "User already exists", Err:errors.New("User already exists")}
 	}
     
    hashedPassword, err := utility.HashPassword(req.Password)
    if err != nil {
-         return "", &utility.AppError{StatusCode: http.StatusBadGateway, Message: "Error occured creating user", Err: err }
+         return "", &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal serval Error", Err: err }
    }
 
    uuid := utility.GenerateUUID()
@@ -27,16 +32,43 @@ func AdminSignup(db *gorm.DB, req model.Admins) (string, *utility.AppError) {
   err = db.Create(&model.Admins{Id:uuid, Name: req.Name, Username: req.Username, Email: req.Email, Password: hashedPassword}).Error
   if err != nil{
 	log.Println(err)
-	return "", &utility.AppError{StatusCode: http.StatusBadRequest, Message: "Unable to create an account", Err: err}
+	return "", &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Couldn't create user", Err: err}
   }
 
   token, err := utility.CreateToken(uuid, req.Email)
   if err != nil{
 	log.Println(err)
-	return "", &utility.AppError{StatusCode: http.StatusConflict, Message: "Unable to create an account", Err: err}
+	return "", &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err: err}
   }
 
 
+
+ return token, nil
+}
+
+
+func AdminSignin (db *gorm.DB, req model.AdminSignin) (string, *utility.AppError){
+	admin, helperErr :=  helper.CheckIfAdminExist("", req.Username, db)
+
+      
+	 if admin.Email == "" && helperErr != nil{
+		return "", helperErr
+	 }
+	 
+	if admin.Email == "" && helperErr == nil {
+     return "", &utility.AppError{StatusCode: http.StatusUnauthorized, Message: "Invalid Crendentials", Err: errors.New("Invalid Crendentials")}
+	}
+
+   err := utility.ComparePassword(admin.Password, req.Password)
+   if err != nil{
+	 return "", &utility.AppError{StatusCode: http.StatusUnauthorized, Message: "Invalid Crendentials", Err: err}
+   }
+
+
+  token, err := utility.CreateToken(admin.Id, admin.Email)   
+  if err != nil{
+	return "", &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err: err}
+  }
 
  return token, nil
 }

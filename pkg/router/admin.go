@@ -18,7 +18,8 @@ func AdminRouter (r *gin.Engine, db *gorm.DB, rdb *redis.Client){
    adminGroup := r.Group("/admin")
 
    {
-	adminGroup.POST("/create", adminBase.Signup)
+	adminGroup.POST("/signup", adminBase.Signup)
+	adminGroup.POST("/signin", adminBase.Signin)
    }
 
 }

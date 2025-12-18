@@ -8,7 +8,7 @@ import (
 
 func SwaggerDocs (r *gin.Engine){
 	r.Static("/doc", "./doc")
-	url := ginSwagger.URL("/doc/swagger.yaml")
+	url := ginSwagger.URL("/doc/swagger.json")
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, url))
 
 }
