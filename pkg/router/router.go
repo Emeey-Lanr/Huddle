@@ -24,7 +24,7 @@ func RoutesSetup (db *gorm.DB, rdb *redis.Client) *gin.Engine{
 
 	//All Routes
 	AdminRouter(r, db, rdb)
-	StoreRouter(r, db)
+	StoreRouter(r, db, rdb)
 
  // //serves app docs and swagger ui
   doc.SwaggerDocs(r)

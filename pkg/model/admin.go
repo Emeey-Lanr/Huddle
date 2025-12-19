@@ -3,6 +3,7 @@ package model
 import (
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
 
@@ -21,4 +22,10 @@ type Admins struct {
 type AdminSignin struct {
 	Username string  `json:"username" validate:"required"`
 	Password string `json:"password" validate:"required"`
+}
+
+type Claims struct {
+	AdminId string `json:"admin_id"`
+	Email string `json:"email"`
+	jwt.RegisteredClaims
 }
