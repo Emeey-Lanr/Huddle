@@ -7,8 +7,22 @@
   "tags":[
     {"name":"Admin Auth",
     "description":"Admin Authetication endpoints"
+  },
+   {"name":"Create Store",
+    "description":"Store Creation endpoints"
   }
   ],
+
+  "components":{
+    "securitySchemes":{
+      "BearerAuth":{
+        "type":"http",
+        "scheme":"bearer",
+        "bearerFormat":"JWT"
+      }
+    }
+  },
+
   "paths":{
     "/admin/signup": {
       "post": {
@@ -49,19 +63,73 @@
         }
       }
     },
-    "/admin/sigin": {
+
+    "/admin/signin": {
       "post": {
         "tags": ["Admin Auth"],
-        "summary": "Signin",
+        "summary": "Create an admin",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["username", "password"],
+                "properties": {
+                  "username": { "type": "string" },
+                  "password": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
-            "description": "Admin Created",
+            "description": "Login Succesfull",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "username": { "type": "string" },
+                    "Message": { "type": "string" },
+                    "password": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "/store/create": {
+      "post": {
+        "tags": ["Create Store"],
+        "summary": "Create a store",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["store", "description"],
+                "properties": {
+                  "store_name": { "type": "string" },
+                  "description": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Login Succesfull",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "Message": { "type": "string" },
                     "password": { "type": "string" }
                   }
                 }
