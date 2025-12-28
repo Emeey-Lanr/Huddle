@@ -10,7 +10,8 @@ func GenerateUUID () uuid.UUID {
   return  generatedUUID
 }
 
-func StringToUUID (u string) ( uuid.UUID){
-   id, _ :=  uuid.Parse(u)
-  return id
+func StringToUUID (u string) (uuid.UUID, error){
+   id, err :=  uuid.Parse(u)
+  return id, err
 }
+

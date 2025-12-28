@@ -9,19 +9,19 @@ import (
 	"gorm.io/gorm"
 )
 
-func CheckIfAdminExist(email, username string, db *gorm.DB ) (model.Admins, *utility.AppError){
+func CheckIfAdminExist(email, username string, db *gorm.DB ) (model.Admins, *utility.AppError, bool){
     var admin model.Admins
 	err := db.Where("email = ? OR username = ?", email, username).First(&admin).Error
 
 	if err != nil {
 	   if errors.Is(err, gorm.ErrRecordNotFound){
-		 return model.Admins{}, nil
+		 return  model.Admins{}, nil, false
 	   }else{
-		return model.Admins{}, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err: err}
+		return model.Admins{}, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err: err}, false
 	   }
 }
 
- return admin, nil
+ return  admin, nil, true
 
 }
 

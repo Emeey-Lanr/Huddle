@@ -41,7 +41,7 @@ func (b *AdminBase) Signup(c *gin.Context){
     }
 
   
-   response.Created(c, "Registration Succesfull", map[string]string{"token":token})
+   response.Created(c, "Registration Succesfull", map[string]*string{"token":token})
   
 }
 
@@ -70,6 +70,6 @@ func (b *AdminBase) Signin(c * gin.Context){
     return
    }
 
-  response.Success(c, "Login Succesfull", map[string]string{"token":token})
+  response.Success(c, "Login Succesfull", map[string]*string{"token":token})
 
 }

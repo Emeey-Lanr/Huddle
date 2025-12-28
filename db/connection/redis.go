@@ -10,7 +10,7 @@ import (
 
 
 
-var ctx = context.Background()
+var Ctx = context.Background()
 
 func ConnectToRedis ()  *redis.Client{
  rdb := redis.NewClient(&redis.Options{
@@ -20,7 +20,7 @@ func ConnectToRedis ()  *redis.Client{
 
  })
 
- value, err := rdb.Ping(ctx).Result()
+ value, err := rdb.Ping(Ctx).Result()
  if err != nil{
 	panic(err)
  }

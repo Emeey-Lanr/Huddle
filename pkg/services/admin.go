@@ -11,20 +11,20 @@ import (
 	"gorm.io/gorm"
 )
 
-func AdminSignup(db *gorm.DB, req model.Admins) (string, *utility.AppError) {
-	admin, helperErr := helper.CheckIfAdminExist(req.Email, req.Username, db)
+func AdminSignup(db *gorm.DB, req model.Admins) (*string, *utility.AppError) {
+	 _, helperErr, exists := helper.CheckIfAdminExist(req.Email, req.Username, db)
    
-	if admin.Email == "" && helperErr != nil {
-		return "", helperErr
+	if !exists && helperErr != nil {
+		return nil, helperErr
 	}
 
-	if admin.Email != "" && helperErr == nil {
-       return "", &utility.AppError{StatusCode: http.StatusUnauthorized, Message: "User already exists", Err:errors.New("User already exists")}
+	if exists  && helperErr == nil {
+       return nil, &utility.AppError{StatusCode: http.StatusUnauthorized, Message: "User already exists", Err:errors.New("User already exists")}
 	}
     
    hashedPassword, err := utility.HashPassword(req.Password)
    if err != nil {
-         return "", &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal serval Error", Err: err }
+         return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal serval Error", Err: err }
    }
 
    uuid := utility.GenerateUUID()
@@ -32,43 +32,43 @@ func AdminSignup(db *gorm.DB, req model.Admins) (string, *utility.AppError) {
   err = db.Create(&model.Admins{Id:uuid, Name: req.Name, Username: req.Username, Email: req.Email, Password: hashedPassword}).Error
   if err != nil{
 	log.Println(err)
-	return "", &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Couldn't create user", Err: err}
+	return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Couldn't create user", Err: err}
   }
 
   token, err := utility.CreateToken(uuid, req.Email)
   if err != nil{
 	log.Println(err)
-	return "", &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err: err}
+	return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err: err}
   }
 
 
 
- return token, nil
+ return &token, nil
 }
 
 
-func AdminSignin (db *gorm.DB, req model.AdminSignin) (string, *utility.AppError){
-	admin, helperErr :=  helper.CheckIfAdminExist("", req.Username, db)
+func AdminSignin (db *gorm.DB, req model.AdminSignin) (*string, *utility.AppError){
+	admin, helperErr, exists :=  helper.CheckIfAdminExist("", req.Username, db)
 
       
-	 if admin.Email == "" && helperErr != nil{
-		return "", helperErr
+	 if !exists && helperErr != nil{
+		return nil, helperErr
 	 }
 	 
-	if admin.Email == "" && helperErr == nil {
-     return "", &utility.AppError{StatusCode: http.StatusUnauthorized, Message: "Invalid Crendentials", Err: errors.New("Invalid Crendentials")}
+	if !exists && helperErr == nil {
+     return nil, &utility.AppError{StatusCode: http.StatusUnauthorized, Message: "Invalid Crendentials", Err: errors.New("Invalid Crendentials")}
 	}
 
    err := utility.ComparePassword(admin.Password, req.Password)
    if err != nil{
-	 return "", &utility.AppError{StatusCode: http.StatusUnauthorized, Message: "Invalid Crendentials", Err: err}
+	 return nil, &utility.AppError{StatusCode: http.StatusUnauthorized, Message: "Invalid Crendentials", Err: err}
    }
 
 
   token, err := utility.CreateToken(admin.Id, admin.Email)   
   if err != nil{
-	return "", &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err: err}
+	return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err: err}
   }
 
- return token, nil
+ return &token, nil
 }

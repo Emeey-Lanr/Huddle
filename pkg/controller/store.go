@@ -22,7 +22,11 @@ type StoreBase struct {
 func (b *StoreBase) Create (c *gin.Context){
   adminId, adminExists := c.Get("adminId")
   Email, emailExists := c.Get("email")
-  uuidAdminId :=  utility.StringToUUID(adminId.(string))
+
+  uuidAdminId, err :=  utility.StringToUUID(adminId.(string))
+  if err != nil {
+	 response.Error(c, http.StatusInternalServerError, "Internal Server Err", err)
+  }
 
   if !adminExists || !emailExists{
    response.Error(c, http.StatusUnauthorized, "Access Not allowed", errors.New("Not allowed"))
