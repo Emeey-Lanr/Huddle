@@ -7,10 +7,11 @@ import (
 	"huddle/pkg/services"
 	"huddle/pkg/utility"
 	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
-	"log"
+	// "log"
 )
 
 type ProductBase struct {
@@ -41,12 +42,31 @@ func (b *ProductBase) Add (c *gin.Context){
 			return 
 		 }
 	 }
- log.Println(adminId, storePublicId)	 
+
   product, serviceErr := services.AddProduct(req, b.Db, b.Rdb, adminId.(string), storePublicId.(string))
  if serviceErr != nil{
 	response.Error(c, serviceErr.StatusCode, serviceErr.Message, serviceErr.Err)
 	return
  }
 
- response.Created(c, "Product Added Succesfully", gin.H{"id":product.Id})
+ response.Created(c, "Product Added Succesfully", gin.H{"id":product.PublicId})
 } 
+
+
+func (b *ProductBase) AddImages (c *gin.Context) {
+   productId :=	c.Param("id")
+
+   form, err :=  c.MultipartForm()
+   if err != nil{
+     response.Error(c, http.StatusBadGateway, "Bad Request", err)
+	 return
+   }
+     files := form.File["image"]
+ serviceErr := services.AddImages(b.Db, b.Rdb, files, productId)
+	if serviceErr != nil{
+		response.Error(c,serviceErr.StatusCode, serviceErr.Message, serviceErr.Err)
+		return 
+	}
+   
+	response.Created(c, "Upload succesfully Image/s succesfully create", nil)
+}

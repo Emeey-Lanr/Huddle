@@ -14,11 +14,10 @@ func ProductRouter ( r *gin.Engine,db *gorm.DB, rdb *redis.Client) {
      
 	 productRoutes := r.Group("/product")
 	 productRoutes.Use(middleware.AuthMiddleware)
-	 productRoutes.Use(middleware.StoreContextMiddleware)
 
 	 productsController := controller.ProductBase{Db: db, Rdb: rdb}
 	 {
-		productRoutes.POST("/", productsController.Add)
+		productRoutes.POST("/", middleware.StoreContextMiddleware, productsController.Add)
 		productRoutes.GET("/")
 		productRoutes.GET("/:id")
 		productRoutes.PUT("/:id")
@@ -26,4 +25,10 @@ func ProductRouter ( r *gin.Engine,db *gorm.DB, rdb *redis.Client) {
 		
 	 }
  
+	//  Images
+
+	 {
+		productRoutes.POST("/:id/images", productsController.AddImages)
+	
+	 }
 }

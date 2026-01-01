@@ -10,6 +10,7 @@ import (
 type Products struct {
 	Id uuid.UUID `json:"id" gorm:"uuid"`
 	StoreId uuid.UUID `json:"store_id" gorm:"column:store_id"`
+	PublicId string `json:"public_id" gorm:"column:public_id"`
 	Name   string `json:"name" validate:"required"`
 	Description string `json:"description" validate:"required,min=10"`
 	Price  decimal.Decimal  `json:"price" validate:"required"`
@@ -18,4 +19,14 @@ type Products struct {
 	Active bool `json:"active"`
 	CreatedAt time.Time `json:"created_at" gorm:"column:created_at"`
 	UpdateAt time.Time `json:"updated_at" gorm:"column:updated_at"`
+}
+
+
+type Images struct {
+	Id uuid.UUID 
+	ProductId uuid.UUID `json:"id" gorm:"uuid" gorm:"column:product_id"`
+	PublicID  string `json:"public_id" gorm:"column:public_id"`
+	ImageURL   string `json:"image_url" gorm:"column:image_url"`
+	
+
 }
