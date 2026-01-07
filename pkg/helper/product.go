@@ -6,6 +6,7 @@ import (
 	"huddle/db/connection"
 	"huddle/pkg/model"
 	"huddle/pkg/utility"
+		"huddle/internal/cloudinary"
 	"log"
 	"mime/multipart"
 	"net/http"
@@ -89,30 +90,34 @@ func DoesProductExist(db *gorm.DB,name string, storeId uuid.UUID)(*model.Product
 func ValidateProductId(db *gorm.DB, rdb *redis.Client, publicId string)(*uuid.UUID, *utility.AppError){
 	var product model.Products
 	
-	
 	 internalProductId, err :=  rdb.Get(connection.Ctx, publicId).Result()
-	 if err == redis.Nil{ //if it empty is either it has expired
-		if 	err := db.Where("public_id = ?", publicId).First(&product).Error; err != nil{
-	      if errors.Is(err, gorm.ErrRecordNotFound){
-		  return  nil, &utility.AppError{StatusCode: http.StatusUnauthorized, Message: "Invalid User Id", Err: err}
-	    }
 
-	 if err :=  rdb.Set(connection.Ctx, publicId, product.Id.String(), 30 * time.Minute).Err(); err != nil{
+	 if err != nil{
+		if err == redis.Nil{
+			if 	err := db.Where("public_id = ?", publicId).First(&product).Error; err != nil{
+	      if errors.Is(err, gorm.ErrRecordNotFound){
+		  return  nil, &utility.AppError{StatusCode: http.StatusUnauthorized, Message: "Invalid Id", Err: err}
+	    }else{
+		 return  nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Err", Err: err}
+		}
+		}
+        
+		 if err :=  rdb.Set(connection.Ctx, publicId, product.Id.String(), 30 * time.Minute).Err(); err != nil{
         return  nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Err", Err: err}
 	 }
 
 	 return &product.Id, nil
-}
 
-	 }else if err != nil{
-		return nil,  &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Err", Err: err}
 	 }
+	}
+ 
 
-     internalProductIdUUID, err :=  utility.StringToUUID(internalProductId)
-	 if err != nil{
-		return nil,  &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Err", Err: err}
-	 }
-	 return &internalProductIdUUID, nil
+   uuidInternalProductId, err := utility.StringToUUID(internalProductId)
+   if err  != nil{
+	return  nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Err", Err: err}
+   }
+
+   return &uuidInternalProductId, nil
 }
 
 
@@ -123,18 +128,21 @@ func ValidateImages(images  []*multipart.FileHeader)*utility.AppError{
 	}
 	
 	for _, val := range images{
-		if val.Size > 5242880{
+		if val.Size  > 5242880{
 			return &utility.AppError{StatusCode: http.StatusBadRequest, Message: "Image file size exceeded", Err: errors.New("Each Image max size should be 5mb")}
 		}
-
-	
+		
+        if val.Size == 0 {
+			return &utility.AppError{StatusCode: http.StatusBadRequest, Message: "Image file is below minimum", Err: errors.New("Each Image max size should not be 0 but greater and lesser or equals to 5mb")}
+		}
+	    
 		file, err := val.Open()
 		if err != nil{
 			return &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err: err}
 		}
-		defer file.Close()
-
 		_, _, err = image.Decode(file)
+		defer file.Close() 
+
 		if err != nil {
 			return &utility.AppError{StatusCode: http.StatusBadRequest, Message: "Invalid Image Format", Err: err}
 		}
@@ -146,24 +154,30 @@ func ValidateImages(images  []*multipart.FileHeader)*utility.AppError{
 }
 
 
-func UploadImagesToCloudinary (images []*multipart.FileHeader)(*map[string]string, *utility.AppError){
-	uploaded := map[string]string{}
+
+func UploadImagesToCloudinary (images []*multipart.FileHeader)([]string,[]string, *utility.AppError){
+	uploadedImgPublicId := []string{}
+	uploadedImgSecureURL := []string{}
+
 
   for _, val := range images {
-    result, err :=  utility.UploadImageToCloudinary(val, fmt.Sprintf("img_%s", strings.ReplaceAll(utility.GenerateUUID().String(), "-", "")))
+    result, err :=  cloudinary.UploadImageToCloudinary(val, fmt.Sprintf("img_%s", strings.ReplaceAll(utility.GenerateUUID().String(), "-", "")))
 	if err != nil{
-		return &uploaded, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Couldn't Upload Images", Err: err}
+		return uploadedImgPublicId,uploadedImgSecureURL, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Couldn't Upload Images", Err: err}
 	}
-   uploaded[result.PublicID] = result.SecureURL
+	if result.PublicID == "" || result.SecureURL == ""{
+		return nil, nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Couldn't Upload Images", Err: errors.New("Cloudinary returns no public id or url")}
+	}
+    uploadedImgPublicId, uploadedImgSecureURL = append(uploadedImgPublicId, result.PublicID), append(uploadedImgSecureURL, result.SecureURL)
   }
-  return  &uploaded, nil
+  return  uploadedImgPublicId, uploadedImgSecureURL, nil
 }
 
 
 
-func DeleteImagesInCloudinary (images *map[string]string)*utility.AppError{
-	for id, _ := range *images{
-      if err :=  utility.DeleteImageFromCloudinary(id); err != nil{
+func DeleteImagesInCloudinary (imgPublicId []string)*utility.AppError{
+	for _, val := range imgPublicId{
+      if err :=  cloudinary.DeleteImageFromCloudinary(val); err != nil{
 		return &utility.AppError{StatusCode: http.StatusInternalServerError, Message:"Internal Server Error", Err: err}
 	  }
 	}
@@ -171,11 +185,10 @@ func DeleteImagesInCloudinary (images *map[string]string)*utility.AppError{
 	
 }
 
-func SaveImagesToDb (db *gorm.DB, images *map[string]string, productId uuid.UUID)*utility.AppError{
-
+func SaveImagesToDb (db *gorm.DB, imgPublicId, imgURL []string , productId uuid.UUID)*utility.AppError{
  err := db.Transaction(func(tx *gorm.DB) error {
-   for publicId, imageUrl := range *images{
-	imgData := model.Images{Id: utility.GenerateUUID(), ProductId: productId, PublicID: publicId, ImageURL: imageUrl }
+   for id, url := range imgURL{
+	imgData := model.Images{Id: utility.GenerateUUID(), ProductId: productId, PublicID: imgPublicId[id], ImageURL: url }
 	 if  err := tx.Create(&imgData).Error; err != nil{
 	  return err
   }
@@ -186,8 +199,8 @@ func SaveImagesToDb (db *gorm.DB, images *map[string]string, productId uuid.UUID
   })
   
   if err != nil{
-	 if  helperErr := DeleteImagesInCloudinary(images); helperErr != nil{
-        log.Println(err, images)  //we need the log so we can manually delete failed images
+	 if  helperErr := DeleteImagesInCloudinary(imgPublicId); helperErr != nil{
+        log.Println(err, imgPublicId)  //we need the log so we can manually delete failed images
 	    return &utility.AppError{StatusCode: http.StatusInternalServerError, Message:"Internal Server Error", Err: err}
 	}
   }

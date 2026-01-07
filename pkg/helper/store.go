@@ -1,5 +1,4 @@
 package helper
-
 import (
 	"errors"
 	"huddle/pkg/model"

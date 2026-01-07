@@ -53,8 +53,9 @@ func (b *ProductBase) Add (c *gin.Context){
 } 
 
 
+
 func (b *ProductBase) AddImages (c *gin.Context) {
-   productId :=	c.Param("id")
+   publicProductId :=	c.Param("id")
 
    form, err :=  c.MultipartForm()
    if err != nil{
@@ -62,11 +63,29 @@ func (b *ProductBase) AddImages (c *gin.Context) {
 	 return
    }
      files := form.File["image"]
- serviceErr := services.AddImages(b.Db, b.Rdb, files, productId)
+ imageUploadResp, serviceErr := services.AddImages(b.Db, b.Rdb, files, publicProductId)
 	if serviceErr != nil{
 		response.Error(c,serviceErr.StatusCode, serviceErr.Message, serviceErr.Err)
 		return 
 	}
    
-	response.Created(c, "Upload succesfully Image/s succesfully create", nil)
+	response.Created(c, "Image/s succesfully uploaded", imageUploadResp)
+}
+
+
+func (b *ProductBase) DeleteProduct (c *gin.Context){
+ publicId := c.Param("id")
+ if publicId == "" {
+	response.Error(c, http.StatusBadRequest, "Id is empty", errors.New("Id is  empty"))
+   return 
+}
+
+
+  if serviceErr := services.DeleteProduct(b.Db, b.Rdb, publicId); serviceErr != nil{
+response.Error(c, http.StatusBadRequest, "Id is empty", errors.New("Id is  empty"))
+   return 
+  }
+
+  response.Success(c, "Product deleted succesfully", nil) 
+  
 }

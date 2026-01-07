@@ -28,5 +28,14 @@ type Images struct {
 	PublicID  string `json:"public_id" gorm:"column:public_id"`
 	ImageURL   string `json:"image_url" gorm:"column:image_url"`
 	
+}
 
+type ImageData struct {
+  ImageId string `json:"image_id"`
+  ImageURL string `json:"image_url"`
+}
+
+type ImagesCreatedResponse struct {
+	ProductId string `json:"product_id"`
+   Images []ImageData `json:"images"`
 }

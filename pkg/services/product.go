@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"huddle/internal/cloudinary"
 	"huddle/pkg/helper"
 	"huddle/pkg/model"
 	"huddle/pkg/utility"
@@ -75,34 +76,82 @@ func AddProduct (req model.Products, db *gorm.DB , rdb *redis.Client, adminId, s
 }
 
 
-func  AddImages (db *gorm.DB, rdb *redis.Client, images []*multipart.FileHeader,  publicProductId string) (*utility.AppError){
-	 internalProductId, helperErr := helper.ValidateProductId(db,rdb, publicProductId)
+func  AddImages (db *gorm.DB, rdb *redis.Client, images []*multipart.FileHeader,  publicProductId string) (*model.ImagesCreatedResponse, *utility.AppError){
+	internalProductId, helperErr := helper.ValidateProductId(db,rdb, publicProductId)
 	 if helperErr != nil{
-		return helperErr
+		return nil, helperErr
 	 }	 
 		 
-    
 	if  helperErr := helper.ValidateImages(images); helperErr != nil{
-		return helperErr
+		return nil,  helperErr
 	}
 
-	uploadedImages, helperErr :=  helper.UploadImagesToCloudinary(images)
+	uploadedImgPublicId, uploadedImgSecureURL, helperErr :=  helper.UploadImagesToCloudinary(images)
 	if helperErr != nil{
-		if  len(*uploadedImages) > 0{
-            if helperErr := helper.DeleteImagesInCloudinary(uploadedImages); helperErr != nil{
+		if  len(uploadedImgPublicId) > 0{
+            if helperErr := helper.DeleteImagesInCloudinary(uploadedImgPublicId); helperErr != nil{
 				 log.Println(images) //we need the log so we can manually delete failed images
-				  return helperErr
+				  return nil, helperErr
 			}
 			
 		}
-		return helperErr
+		return nil, helperErr
 	}
 
-	 if helperErr :=  helper.SaveImagesToDb(db, uploadedImages, *internalProductId); helperErr != nil{
-        return helperErr
+	fmt.Println(len(uploadedImgPublicId), len(uploadedImgSecureURL))
+     if len(uploadedImgPublicId) < 1 {
+		return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Couldn't upload images", Err: errors.New("An error coccured uploading images")}
 	 }
-	 
 
-   return nil
+	 if helperErr :=  helper.SaveImagesToDb(db, uploadedImgPublicId,uploadedImgSecureURL, *internalProductId); helperErr != nil{
+        return nil, helperErr
+	 }
+	
+	 imageResponse := model.ImagesCreatedResponse{ProductId: publicProductId, Images: []model.ImageData{}}
+	 
+	  for id, val := range uploadedImgPublicId {
+			  imageResponse.Images = append(imageResponse.Images, model.ImageData{ImageId: val, ImageURL: uploadedImgSecureURL[id]})
+	  }
+
+   
+
+   return &imageResponse, nil
 }
 
+
+
+func DeleteProduct (db *gorm.DB, rdb *redis.Client, publicProductId string) *utility.AppError{
+	  internalProductId, helperErr := helper.ValidateProductId(db,rdb, publicProductId)
+	 if helperErr != nil{
+		return  helperErr
+	 }	 
+
+	  var images []model.Images
+	if err := db.Where("product_id = ?", internalProductId).Find(&images).Error; err != nil {
+      return &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Couldn't delete products, unable to retreive image", Err: err}
+	}
+
+	if len(images) > 0{
+		for _, val := range images{
+             if err := cloudinary.DeleteImageFromCloudinary(val.PublicID); err != nil{
+				return &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Couldn't delete products: err deleting images", Err: err}
+			 }
+		}
+	}
+	 
+
+	if  err := db.Where("id = ?", internalProductId).Delete(&model.Products{}).Error; err != nil{
+		return &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Couldn't delete products", Err: err}
+	}
+	 
+   
+   
+
+
+
+	if err := rdb.Del(context.Background(), publicProductId).Err(); err != nil{
+		return &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Couldn't delete products", Err: err}
+	}
+	return nil
+
+}

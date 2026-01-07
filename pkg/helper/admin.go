@@ -3,9 +3,8 @@ package helper
 import (
 	"errors"
 	"huddle/pkg/model"
-	"huddle/pkg/utility"
 	"net/http"
-
+"huddle/pkg/utility"
 	"gorm.io/gorm"
 )
 

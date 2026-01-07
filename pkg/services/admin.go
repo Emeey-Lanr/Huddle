@@ -15,8 +15,9 @@ func AdminSignup(db *gorm.DB, req model.Admins) (*string, *utility.AppError) {
 	 _, helperErr, exists := helper.CheckIfAdminExist(req.Email, req.Username, db)
    
 	if !exists && helperErr != nil {
-		return nil, helperErr
+		return nil,  helperErr 
 	}
+
 
 	if exists  && helperErr == nil {
        return nil, &utility.AppError{StatusCode: http.StatusUnauthorized, Message: "User already exists", Err:errors.New("User already exists")}
