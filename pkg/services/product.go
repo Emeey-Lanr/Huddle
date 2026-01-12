@@ -118,7 +118,22 @@ func  AddImages (db *gorm.DB, rdb *redis.Client, images []*multipart.FileHeader,
    return &imageResponse, nil
 }
 
+func GetAllProducts (db *gorm.DB, rdb *redis.Client, queryData model.ProductQuery) (*[]model.Products, *utility.AppError) {
 
+     internalStoreId, helperErr :=   helper.GetInternalStoreId(rdb, db, queryData.StoreId);
+	 if helperErr != nil {
+		return nil,  helperErr
+	 }
+
+	   query :=  helper.GetAllProductQueryChain(db, *internalStoreId, queryData)
+	    var  products  []model.Products
+	   err := query.Find(&products).Error
+	   if err != nil{
+		 return nil,  &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Err", Err: err}
+	   }
+	  
+   return  &products, nil
+} 
 
 func DeleteProduct (db *gorm.DB, rdb *redis.Client, publicProductId string) *utility.AppError{
 	  internalProductId, helperErr := helper.ValidateProductId(db,rdb, publicProductId)

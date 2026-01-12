@@ -21,6 +21,17 @@ type Products struct {
 	UpdateAt time.Time `json:"updated_at" gorm:"column:updated_at"`
 }
 
+// product query
+type ProductQuery struct {
+	StoreId string `form:"store_id" binding:"required"`
+	Page int `form:"page"`
+	Limit int `form:"limit"`
+	MinPrice int `form:"min_price"`
+	MaxPrice int `form:"max-price"`
+	Sort string `form:"sort"`
+	Order string `form:"order"`
+}
+
 
 type Images struct {
 	Id uuid.UUID 

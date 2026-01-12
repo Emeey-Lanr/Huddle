@@ -72,6 +72,27 @@ func (b *ProductBase) AddImages (c *gin.Context) {
 	response.Created(c, "Image/s succesfully uploaded", imageUploadResp)
 }
 
+func(b *ProductBase) GetAllProducts (c *gin.Context){
+  var query  model.ProductQuery
+
+  if err := c.ShouldBindQuery(&query); err != nil{
+	response.Error(c, http.StatusBadRequest, "Invalid query", err)
+	return
+  }
+  
+   products, servicesErr := services.GetAllProducts(b.Db, b.Rdb, query)  
+   if servicesErr != nil {
+	response.Error(c, servicesErr.StatusCode, servicesErr.Message, servicesErr.Err)
+	return
+   }
+
+   response.Success(c, "Data gotten succesfully", products) 
+}
+
+func (b *ProductBase) GetAProduct(c *gin.Context){
+	
+}
+
 
 func (b *ProductBase) DeleteProduct (c *gin.Context){
  publicId := c.Param("id")
