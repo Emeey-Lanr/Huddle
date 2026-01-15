@@ -118,7 +118,7 @@ func  AddImages (db *gorm.DB, rdb *redis.Client, images []*multipart.FileHeader,
    return &imageResponse, nil
 }
 
-func GetAllProducts (db *gorm.DB, rdb *redis.Client, queryData model.ProductQuery) (*[]model.Products, *utility.AppError) {
+func GetAllProducts (db *gorm.DB, rdb *redis.Client, queryData model.ProductQuery) (*[]model.ProductResponse, *utility.AppError) {
 
      internalStoreId, helperErr :=   helper.GetInternalStoreId(rdb, db, queryData.StoreId);
 	 if helperErr != nil {
@@ -126,7 +126,7 @@ func GetAllProducts (db *gorm.DB, rdb *redis.Client, queryData model.ProductQuer
 	 }
 
 	   query :=  helper.GetAllProductQueryChain(db, *internalStoreId, queryData)
-	    var  products  []model.Products
+	    var  products  []model.ProductResponse
 	   err := query.Find(&products).Error
 	   if err != nil{
 		 return nil,  &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Err", Err: err}
@@ -134,6 +134,34 @@ func GetAllProducts (db *gorm.DB, rdb *redis.Client, queryData model.ProductQuer
 	  
    return  &products, nil
 } 
+
+
+func GetAProduct (db *gorm.DB, rdb *redis.Client, publicId string) (*model.ProductResponse, *[]model.ImagesResponse, *utility.AppError){
+	 internalId, helperErr := helper.ValidateProductId(db, rdb, publicId)
+	 if helperErr != nil{
+		return nil, nil, helperErr
+	 }
+	
+ var product model.ProductResponse
+	 err := db.Model(&model.Products{}).Omit("id, store_id").Where("id = ? AND public_id = ?", internalId, publicId).First(&product).Error 
+	 if err != nil{
+		 if errors.Is(err, gorm.ErrRecordNotFound){
+               	return nil, nil,  &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "User Not Found", Err:err}
+		 }
+		 return nil, nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err:err}
+	 }
+
+	 var productImages []model.ImagesResponse
+	 err = db.Model(&model.Images{}).Select("public_id, image_url").Where("product_id = ?", internalId).Find(&productImages).Error
+	 if err != nil{
+		return nil, nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err:err}
+
+	 }
+	
+	
+   return &product, &productImages, nil
+
+}
 
 func DeleteProduct (db *gorm.DB, rdb *redis.Client, publicProductId string) *utility.AppError{
 	  internalProductId, helperErr := helper.ValidateProductId(db,rdb, publicProductId)

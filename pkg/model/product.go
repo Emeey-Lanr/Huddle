@@ -20,6 +20,18 @@ type Products struct {
 	CreatedAt time.Time `json:"created_at" gorm:"column:created_at"`
 	UpdateAt time.Time `json:"updated_at" gorm:"column:updated_at"`
 }
+type ProductResponse struct {
+	PublicId string `json:"id" gorm:"column:public_id"`
+	Name   string `json:"name" validate:"required"`
+	Description string `json:"description" validate:"required,min=10"`
+	Price  decimal.Decimal  `json:"price" validate:"required"`
+	Currency string `json:"currency" validate:"required,gte=3"`
+	StockQuantity int `json:"stock_quantity" gorm:"column:stock_quantity"`
+	Active bool `json:"active"`
+	CreatedAt time.Time `json:"created_at" gorm:"column:created_at"`
+	UpdateAt time.Time `json:"updated_at" gorm:"column:updated_at"`
+}
+
 
 // product query
 type ProductQuery struct {
@@ -35,7 +47,7 @@ type ProductQuery struct {
 
 type Images struct {
 	Id uuid.UUID 
-	ProductId uuid.UUID `json:"id" gorm:"uuid" gorm:"column:product_id"`
+	ProductId uuid.UUID `json:"product_id" gorm:"uuid" gorm:"column:product_id"`
 	PublicID  string `json:"public_id" gorm:"column:public_id"`
 	ImageURL   string `json:"image_url" gorm:"column:image_url"`
 	
@@ -49,4 +61,11 @@ type ImageData struct {
 type ImagesCreatedResponse struct {
 	ProductId string `json:"product_id"`
    Images []ImageData `json:"images"`
+}
+
+
+// image created repsonse
+type ImagesResponse struct {
+	ProductId string `json:"id" gorm:"column:public_id"`
+	ImageUrl string `json:"img_url" gorm:"column:image_url"`
 }

@@ -119,10 +119,10 @@ func ValidateProductId(db *gorm.DB, rdb *redis.Client, publicId string)(*uuid.UU
    return &uuidInternalProductId, nil
 }
 
-func GetAllProductQueryChain (db *gorm.DB, internalId uuid.UUID, queryData model.ProductQuery)(*gorm.DB){
+func GetAllProductQueryChain(db *gorm.DB, storeInternalId uuid.UUID, queryData model.ProductQuery)(*gorm.DB){
   query := db.Model(&model.Products{})
   
-  query = query.Where("id = ?", internalId)
+  query = query.Where("store_id = ?", storeInternalId)
   
   if queryData.MinPrice > 0 {
 	query = query.Where("price >= ?", queryData.MinPrice)
@@ -132,7 +132,7 @@ func GetAllProductQueryChain (db *gorm.DB, internalId uuid.UUID, queryData model
 	query = query.Where("price <= ?", queryData.MaxPrice)
   }
 
-  query = query.Limit(10).Order("Created_at DESC")
+  query = query.Omit("id, store_id").Limit(10)
 
   return query
 }

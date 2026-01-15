@@ -89,8 +89,21 @@ func(b *ProductBase) GetAllProducts (c *gin.Context){
    response.Success(c, "Data gotten succesfully", products) 
 }
 
-func (b *ProductBase) GetAProduct(c *gin.Context){
+func (b *ProductBase) GetAProduct (c *gin.Context){
+	publicId := c.Param("id")
+	if publicId == ""{
+		response.Error(c, http.StatusBadRequest, "Invalid Product Id", errors.New("Invalid Product Id"))
+	 return
+	}
+
+	product, images, sevicesErr := services.GetAProduct(b.Db, b.Rdb, publicId)
+	if sevicesErr != nil{
+      response.Error(c, sevicesErr.StatusCode, sevicesErr.Message, sevicesErr.Err)
+	  return
+	}
 	
+	data := map[string]any{"product":product, "images":images}
+ response.Success(c, "Product Found", data)
 }
 
 
