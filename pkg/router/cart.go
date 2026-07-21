@@ -14,5 +14,10 @@ func CartRoutes(r *gin.Engine, db *gorm.DB, rdb *redis.Client) {
 
 	{
 		cartGroup.POST("/", cartController.AddToCart)
+		cartGroup.GET("/", cartController.GetCart)
+		cartGroup.PUT("/items/:id", cartController.UpdateCartItem)
+		cartGroup.DELETE("/items/:id", cartController.RemoveCartItem)
+		cartGroup.DELETE("/", cartController.ClearCart)
 	}
 }
+

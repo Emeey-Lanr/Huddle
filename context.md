@@ -84,6 +84,11 @@ huddle/
 | Method | Endpoint | Auth / Cookie | Description | Status |
 | :--- | :--- | :--- | :--- | :--- |
 | `POST` | `/cart` | Session Cookie | Add item to shopping cart (persisted in Redis with 7-day TTL). | ✅ Completed |
+| `GET` | `/cart` | Session Cookie | Retrieve active shopping cart items from Redis session. | ✅ Completed |
+| `PUT` | `/cart/items/:id` | Session Cookie | Update product quantity in active cart. | ✅ Completed |
+| `DELETE` | `/cart/items/:id` | Session Cookie | Remove specific product from active cart. | ✅ Completed |
+| `DELETE` | `/cart` | Session Cookie | Clear active shopping cart session and expire cookie. | ✅ Completed |
+
 
 ### 📄 Documentation & System
 | Method | Endpoint | Auth | Description | Status |

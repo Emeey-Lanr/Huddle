@@ -12,3 +12,8 @@ type CartResponse struct {
 	SessionId string     `json:"session_id"`
 	Items     []CartItem `json:"items"`
 }
+
+type UpdateCartItemRequest struct {
+	Quantity uint `json:"quantity" validate:"required,gte=1"`
+}
+
