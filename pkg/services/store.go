@@ -7,44 +7,44 @@ import (
 	"huddle/pkg/model"
 	"huddle/pkg/utility"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
+func CreateStore(db *gorm.DB, req model.Stores, adminId uuid.UUID, email string) (*model.Stores, *string, *utility.AppError) {
+	exists, _, err := helper.StoreExist(db, adminId, req.StoreName)
 
-
-func CreateStore (db *gorm.DB, req model.Stores, adminId uuid.UUID, email string) (*model.Stores, *string,  *utility.AppError){
-
-	exists, _, err := helper.StoreExist(db, adminId, req.StoreName) 
-	fmt.Println(exists, err)
-
-	if err != nil && !exists{
-		return  nil, nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err: err}
+	if err != nil && !exists {
+		return nil, nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err: err}
 	}
 
-	if err == nil  && exists{
-		return nil, nil, &utility.AppError{StatusCode: http.StatusUnauthorized, Message: "Store name already exits",  Err: errors.New("Store name already exists")}
+	if err == nil && exists {
+		return nil, nil, &utility.AppError{StatusCode: http.StatusConflict, Message: "Store name already exists", Err: errors.New("store name already exists")}
 	}
 
-
-    apiKey, err := utility.GenerateAPIKey()
-	if err != nil{
-		return nil,nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err: err}
-	}
-    
-	hashedApiKey, err := utility.HashPassword(apiKey) // using the password utility for hashing api key
-    if err != nil{
-		return nil, nil,  &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err: err}
+	apiKey, err := utility.GenerateAPIKey()
+	if err != nil {
+		return nil, nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err: err}
 	}
 
-   storeId :=  fmt.Sprintf("str-%v", utility.GenerateUUID())
+	hashedApiKey := utility.HashAPIKey(apiKey)
 
-    data := model.Stores{ID: utility.GenerateUUID(), AdminId:adminId, StoreName:req.StoreName, StoreDescription: req.StoreDescription, ApiKey: hashedApiKey, StoreId: storeId }
-    if err := db.Create(&data).Error; err != nil{
-		return nil,nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Sever Error", Err: err}
+	storeId := fmt.Sprintf("str-%s", strings.ReplaceAll(utility.GenerateUUID().String(), "-", ""))
+
+	data := model.Stores{
+		ID:               utility.GenerateUUID(),
+		AdminId:          adminId,
+		StoreName:        req.StoreName,
+		StoreDescription: req.StoreDescription,
+		ApiKey:           hashedApiKey,
+		StoreId:          storeId,
 	}
- 
-   
-  return &data, &apiKey, nil
+
+	if err := db.Create(&data).Error; err != nil {
+		return nil, nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err: err}
+	}
+
+	return &data, &apiKey, nil
 }

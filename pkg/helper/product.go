@@ -64,7 +64,7 @@ func VerifyOwnerShip (db *gorm.DB, storeId, adminId uuid.UUID) *utility.AppError
     var store model.Stores
  if err := db.Where("admin_id = ? AND id = ?", adminId, storeId).First(&store).Error; err != nil{
    if errors.Is(err, gorm.ErrRecordNotFound){
-     return &utility.AppError{StatusCode: http.StatusUnauthorized, Message: "Status Not Verfied", Err: errors.New("Status Not Verified")}
+     return &utility.AppError{StatusCode: http.StatusForbidden, Message: "Ownership not verified", Err: errors.New("admin does not own this store")}
    }
    return &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err: err}
  }

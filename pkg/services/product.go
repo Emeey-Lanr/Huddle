@@ -198,3 +198,44 @@ func DeleteProduct (db *gorm.DB, rdb *redis.Client, publicProductId string) *uti
 	return nil
 
 }
+
+func UpdateProduct(db *gorm.DB, rdb *redis.Client, publicProductId string, req model.ProductUpdate) (*model.ProductResponse, *utility.AppError) {
+	internalProductId, helperErr := helper.ValidateProductId(db, rdb, publicProductId)
+	if helperErr != nil {
+		return nil, helperErr
+	}
+
+	updates := make(map[string]interface{})
+	if req.Name != "" {
+		updates["name"] = req.Name
+	}
+	if req.Description != "" {
+		updates["description"] = req.Description
+	}
+	if !req.Price.IsZero() {
+		updates["price"] = req.Price
+	}
+	if req.Currency != "" {
+		updates["currency"] = req.Currency
+	}
+	if req.StockQuantity >= 0 {
+		updates["stock_quantity"] = req.StockQuantity
+	}
+	if req.Active != nil {
+		updates["active"] = *req.Active
+	}
+	updates["updated_at"] = time.Now().UTC()
+
+	if len(updates) > 0 {
+		if err := db.Model(&model.Products{}).Where("id = ?", internalProductId).Updates(updates).Error; err != nil {
+			return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Could not update product", Err: err}
+		}
+	}
+
+	var product model.ProductResponse
+	if err := db.Model(&model.Products{}).Omit("id, store_id").Where("id = ?", internalProductId).First(&product).Error; err != nil {
+		return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Could not fetch updated product", Err: err}
+	}
+
+	return &product, nil
+}

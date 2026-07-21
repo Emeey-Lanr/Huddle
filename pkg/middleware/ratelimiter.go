@@ -1,48 +1,78 @@
 package middleware
 
 import (
+	"huddle/pkg/response"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"log"
 )
 
-
-
-type RateData struct{
-	Time time.Time
-	Retry int
+type ClientRateData struct {
+	StartTime time.Time
+	Requests  int
 }
-var users  = make(map[string]*RateData)
+
+type MemoryRateLimiter struct {
+	mu           sync.Mutex
+	clients      map[string]*ClientRateData
+	maxRequests  int
+	windowLength time.Duration
+}
+
+func NewMemoryRateLimiter(maxRequests int, windowLength time.Duration) *MemoryRateLimiter {
+	limiter := &MemoryRateLimiter{
+		clients:      make(map[string]*ClientRateData),
+		maxRequests:  maxRequests,
+		windowLength: windowLength,
+	}
+
+	// Periodic cleanup of expired client IP entries
+	go func() {
+		for {
+			time.Sleep(2 * windowLength)
+			limiter.mu.Lock()
+			now := time.Now()
+			for ip, data := range limiter.clients {
+				if now.Sub(data.StartTime) > windowLength {
+					delete(limiter.clients, ip)
+				}
+			}
+			limiter.mu.Unlock()
+		}
+	}()
+
+	return limiter
+}
+
+var defaultLimiter = NewMemoryRateLimiter(60, 1*time.Minute)
 
 func RateLimiter(c *gin.Context) {
-   clientIp := c.ClientIP()
+	clientIP := c.ClientIP()
 
-   log.Println(clientIp)
+	defaultLimiter.mu.Lock()
+	data, exists := defaultLimiter.clients[clientIP]
+	now := time.Now()
 
-   _, exist := users[clientIp]
-
-   if !exist {
-     users[clientIp] = &RateData{Time: time.Now(), Retry: 1}
-	 c.Next()	  
-   }else {
-        users[clientIp].Retry++
-         log.Println(time.Since(users[clientIp].Time), "kkk")
-
-     if time.Since(users[clientIp].Time) >= 1 * time.Minute{
-        if users[clientIp].Retry >= 4{
-
-			time.Sleep(10 * time.Second)
-			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"message":"too many request"})
-			return
-		}else{
-			delete(users, clientIp)
-			c.Next()
+	if !exists || now.Sub(data.StartTime) > defaultLimiter.windowLength {
+		defaultLimiter.clients[clientIP] = &ClientRateData{
+			StartTime: now,
+			Requests:  1,
 		}
+		defaultLimiter.mu.Unlock()
+		c.Next()
+		return
+	}
 
-	 }
+	data.Requests++
+	if data.Requests > defaultLimiter.maxRequests {
+		defaultLimiter.mu.Unlock()
+		response.Error(c, http.StatusTooManyRequests, "Rate limit exceeded. Please try again later.", nil)
+		c.Abort()
+		return
+	}
 
-   }
-
+	defaultLimiter.mu.Unlock()
+	c.Next()
 }

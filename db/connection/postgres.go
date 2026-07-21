@@ -6,37 +6,49 @@ import (
 	"os"
 	"time"
 
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
-
-	"gorm.io/driver/postgres"
 )
 
+func ConnectToDb() *gorm.DB {
+	host := os.Getenv("DB_HOST")
+	user := os.Getenv("DB_USER")
+	password := os.Getenv("DB_PASSWORD")
+	dbName := os.Getenv("DB_NAME")
+	port := os.Getenv("DB_PORT")
 
+	if port == "" {
+		port = "5432"
+	}
 
-func ConnectToDb () *gorm.DB {
+	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable", host, user, password, dbName, port)
 
-host := os.Getenv("DB_HOST") 
-user := os.Getenv("DB_USER")
-password:= os.Getenv("DB_PASSWORD")
-dbName:= os.Getenv("DB_NAME")
-port := os.Getenv("DB_PORT")
-dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable", host, user, password, dbName, port )
-	
-log.Println(dsn)
-db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-	NamingStrategy: schema.NamingStrategy{
-		SingularTable: true, //cancels pularization
-	},
-	PrepareStmt: true,
-	NowFunc: func() time.Time {return time.Now().UTC()},
-})
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+		NamingStrategy: schema.NamingStrategy{
+			SingularTable: true,
+		},
+		PrepareStmt: true,
+		NowFunc: func() time.Time {
+			return time.Now().UTC()
+		},
+	})
 
-if err != nil{
-	panic("Unable to connect to db"+ err.Error())
-}
+	if err != nil {
+		log.Fatalf("Unable to connect to database: %v", err)
+	}
 
-log.Println("DB connected")
+	sqlDB, err := db.DB()
+	if err != nil {
+		log.Fatalf("Failed to configure database connection pool: %v", err)
+	}
 
-return db
+	// Production Connection Pool tuning
+	sqlDB.SetMaxOpenConns(25)
+	sqlDB.SetMaxIdleConns(10)
+	sqlDB.SetConnMaxLifetime(15 * time.Minute)
+	sqlDB.SetConnMaxIdleTime(5 * time.Minute)
+
+	log.Println("Database connection pool established successfully")
+	return db
 }

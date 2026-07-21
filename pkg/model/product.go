@@ -33,6 +33,16 @@ type ProductResponse struct {
 }
 
 
+// product update request
+type ProductUpdate struct {
+	Name          string          `json:"name"`
+	Description   string          `json:"description"`
+	Price         decimal.Decimal `json:"price"`
+	Currency      string          `json:"currency"`
+	StockQuantity int             `json:"stock_quantity"`
+	Active        *bool           `json:"active"`
+}
+
 // product query
 type ProductQuery struct {
 	StoreId string `form:"store_id" binding:"required"`

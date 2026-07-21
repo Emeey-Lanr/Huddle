@@ -1,15 +1,17 @@
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "Huddle API",
+    "title": "Huddle Multi-Tenant E-Commerce API",
+    "description": "API documentation for the Huddle multi-tenant e-commerce backend platform.",
     "version": "1.0.0"
   },
   "tags": [
-    { "name": "Admin Auth", "description": "Admin Authetication endpoints" },
-    { "name": "Create Store", "description": "Store Creation endpoints" },
-    { "name": "Products", "description": "Produtcs Endpoint" }
+    { "name": "Admin Auth", "description": "Platform administrator authentication" },
+    { "name": "Store", "description": "Tenant store management" },
+    { "name": "Products", "description": "Product catalog and media management" },
+    { "name": "Customer", "description": "Customer authentication and profile" },
+    { "name": "Cart", "description": "Shopping cart session operations" }
   ],
-
   "components": {
     "securitySchemes": {
       "BearerAuth": {
@@ -18,26 +20,23 @@
         "bearerFormat": "JWT"
       }
     },
-
-    "parameters":{
-      "XStoreId":{
-        "name":"X-Store_Id",
-        "in":"header",
-        "required":true,
-        "description":"Store identifier",
-        "schema":{
-          "type":"string",
-          "format":"uuid"
+    "parameters": {
+      "XStoreIdHeader": {
+        "name": "X-Store-Id",
+        "in": "header",
+        "required": true,
+        "description": "Public store identifier",
+        "schema": {
+          "type": "string"
         }
       }
     }
   },
-
   "paths": {
     "/admin/signup": {
       "post": {
         "tags": ["Admin Auth"],
-        "summary": "Create an admin",
+        "summary": "Register platform administrator",
         "requestBody": {
           "required": true,
           "content": {
@@ -46,10 +45,10 @@
                 "type": "object",
                 "required": ["name", "username", "email", "password"],
                 "properties": {
-                  "name": { "type": "string" },
-                  "username": { "type": "string" },
-                  "email": { "type": "string", "format": "email" },
-                  "password": { "type": "string" }
+                  "name": { "type": "string", "example": "John Doe" },
+                  "username": { "type": "string", "example": "adminjohn" },
+                  "email": { "type": "string", "format": "email", "example": "admin@example.com" },
+                  "password": { "type": "string", "minLength": 6, "example": "secret123" }
                 }
               }
             }
@@ -57,14 +56,20 @@
         },
         "responses": {
           "201": {
-            "description": "Admin Created",
+            "description": "Admin registered successfully",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "Message": { "type": "string" },
-                    "password": { "type": "string" }
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string", "example": "Registration Succesfull" },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "token": { "type": "string", "example": "eyJhbGciOiJIUzI1Ni..." }
+                      }
+                    }
                   }
                 }
               }
@@ -77,7 +82,7 @@
     "/admin/signin": {
       "post": {
         "tags": ["Admin Auth"],
-        "summary": "Create an admin",
+        "summary": "Authenticate administrator",
         "requestBody": {
           "required": true,
           "content": {
@@ -86,26 +91,29 @@
                 "type": "object",
                 "required": ["username", "password"],
                 "properties": {
-                  "username": { "type": "string" },
-                  "password": { "type": "string" }
+                  "username": { "type": "string", "example": "adminjohn" },
+                  "password": { "type": "string", "example": "secret123" }
                 }
               }
             }
           }
         },
         "responses": {
-          "201": {
-            "description": "Login Succesfull",
+          "200": {
+            "description": "Login successful",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string", "example": "Login Succesfull" },
                     "data": {
-                      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...."
-                    },
-                    "message": "Login Succesfull",
-                    "success": true
+                      "type": "object",
+                      "properties": {
+                        "token": { "type": "string", "example": "eyJhbGciOiJIUzI1Ni..." }
+                      }
+                    }
                   }
                 }
               }
@@ -117,13 +125,59 @@
 
     "/store/create": {
       "post": {
-        "tags": ["Create Store"],
-        "summary": "Create a store",
-        "security":[
-           {"BearerAuth":[]}
-        ],
-        "parameters":[ 
-         {"$ref":"#/components/parameters/XStoreId"}
+        "tags": ["Store"],
+        "summary": "Create a new tenant store",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["store_name", "store_description"],
+                "properties": {
+                  "store_name": { "type": "string", "example": "Fashion Hub" },
+                  "store_description": { "type": "string", "example": "Top quality clothing and modern footwear" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Store created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string", "example": "Store Created Succesfully" },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "store_name": { "type": "string", "example": "Fashion Hub" },
+                        "store_id": { "type": "string", "example": "str-2eb6c949-0f20-4213" },
+                        "api_key": { "type": "string", "example": "a1b2c3d4..." },
+                        "created_at": { "type": "string", "format": "date-time" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "/product/": {
+      "post": {
+        "tags": ["Products"],
+        "summary": "Create a product",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/XStoreIdHeader" }
         ],
         "requestBody": {
           "required": true,
@@ -131,10 +185,13 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["store", "description"],
+                "required": ["name", "description", "price", "currency"],
                 "properties": {
-                  "store_name": { "type": "string" },
-                  "store_description": { "type": "string" }
+                  "name": { "type": "string", "example": "Leather Sofa" },
+                  "description": { "type": "string", "example": "Premium handcrafted leather sofa" },
+                  "price": { "type": "number", "example": 1500.00 },
+                  "currency": { "type": "string", "example": "USD" },
+                  "stock_quantity": { "type": "integer", "example": 10 }
                 }
               }
             }
@@ -142,63 +199,20 @@
         },
         "responses": {
           "201": {
-            "description": "Login Succesfull",
-            "content": {
-              "application/json": {
-                "schemas": {
-                  "type":"object",
-                  "properties":{
-                  "data":{
-                    "type":"object",
-                    "properties":{
-                      "apikey":{"type":"string"}
-                    }
-                  },
-                  "message":{"type":"string"}
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-
-    "/products/create": {
-      "post": {
-        "tags": ["Products"],
-        "summary": "Create a store",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object", 
-                "required": ["store", "description"],
-                "properties": {
-                  "name": "Dream",
-                  "description": "An art sofa crafted and designed by Emeey",
-                  "price": 50000,
-                  "currency": "USD",
-                  "stock_quantity": 2
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Login Succesfull",
+            "description": "Product created successfully",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string", "example": "Product Added Succesfully" },
                     "data": {
-                      "id": "2eb6c949-0f20-4213-a271-21ae9b3dcd42"
-                    },
-                    "message": "Product Added Succesfully",
-                    "success": true
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "string", "example": "prod_2eb6c9490f204213" }
+                      }
+                    }
                   }
                 }
               }
@@ -208,10 +222,136 @@
       }
     },
 
-    "/products/images": {
+    "/product/products": {
+      "get": {
+        "tags": ["Products"],
+        "summary": "List products for a store",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "store_id", "in": "query", "required": true, "schema": { "type": "string" } },
+          { "name": "min_price", "in": "query", "required": false, "schema": { "type": "integer" } },
+          { "name": "max_price", "in": "query", "required": false, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Products fetched successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string", "example": "Data gotten succesfully" },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "name": { "type": "string" },
+                          "description": { "type": "string" },
+                          "price": { "type": "number" },
+                          "currency": { "type": "string" },
+                          "stock_quantity": { "type": "integer" },
+                          "active": { "type": "boolean" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "/product/{id}": {
+      "get": {
+        "tags": ["Products"],
+        "summary": "Get a product by public ID",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Product found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string", "example": "Product Found" },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "product": { "type": "object" },
+                        "images": { "type": "array", "items": { "type": "object" } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": ["Products"],
+        "summary": "Update product details",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "description": { "type": "string" },
+                  "price": { "type": "number" },
+                  "currency": { "type": "string" },
+                  "stock_quantity": { "type": "integer" },
+                  "active": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Product updated successfully"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Products"],
+        "summary": "Delete a product",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Product deleted successfully"
+          }
+        }
+      }
+    },
+
+    "/product/{id}/images": {
       "post": {
         "tags": ["Products"],
-        "summary": "Add Image/s to product(min of 1 and max of 5) and each should be equal or lesser than 5mb",
+        "summary": "Upload images for a product (1-5 files, <=5MB each)",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -220,36 +360,117 @@
                 "type": "object",
                 "properties": {
                   "image": {
-                    "type":"string",
-                    "format":"binary"
+                    "type": "array",
+                    "items": { "type": "string", "format": "binary" }
                   }
                 }
-              },
-              "encoding":{
-               "image":{
-                "contentType":"image/jpeg"
-               }
               }
             }
           }
         },
         "responses": {
           "201": {
-            "description": "Login Succesfull",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "id": "2eb6c949-0f20-4213-a271-21ae9b3dcd42"
-                    },
-                    "message": "Product Added Succesfully",
-                    "success": true
-                  }
+            "description": "Images successfully uploaded"
+          }
+        }
+      }
+    },
+
+    "/customer/signup": {
+      "post": {
+        "tags": ["Customer"],
+        "summary": "Register a customer under a tenant store",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["store_id", "name", "email", "password"],
+                "properties": {
+                  "store_id": { "type": "string" },
+                  "name": { "type": "string" },
+                  "email": { "type": "string", "format": "email" },
+                  "password": { "type": "string", "minLength": 6 }
                 }
               }
             }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Customer registered successfully"
+          }
+        }
+      }
+    },
+
+    "/customer/signin": {
+      "post": {
+        "tags": ["Customer"],
+        "summary": "Authenticate customer",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["store_id", "email", "password"],
+                "properties": {
+                  "store_id": { "type": "string" },
+                  "email": { "type": "string", "format": "email" },
+                  "password": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful"
+          }
+        }
+      }
+    },
+
+    "/customer/profile": {
+      "get": {
+        "tags": ["Customer"],
+        "summary": "Get authenticated customer profile",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Profile fetched successfully"
+          }
+        }
+      }
+    },
+
+    "/cart": {
+      "post": {
+        "tags": ["Cart"],
+        "summary": "Add item to shopping cart",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["product_id", "product_name", "product_price", "currency", "quantity"],
+                "properties": {
+                  "product_id": { "type": "string" },
+                  "product_name": { "type": "string" },
+                  "product_price": { "type": "number" },
+                  "currency": { "type": "string" },
+                  "quantity": { "type": "integer", "minimum": 1 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Item added to cart successfully"
           }
         }
       }
