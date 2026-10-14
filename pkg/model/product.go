@@ -14,7 +14,7 @@ type Products struct {
 	Name   string `json:"name" validate:"required"`
 	Description string `json:"description" validate:"required,min=10"`
 	Price  decimal.Decimal  `json:"price" validate:"required"`
-	Currency string `json:"currency" validate:"required,gte=3"`
+	Currency string `json:"currency" validate:"required,len=3"`
 	StockQuantity int `json:"stock_quantity" gorm:"column:stock_quantity"`
 	Active bool `json:"active"`
 	CreatedAt time.Time `json:"created_at" gorm:"column:created_at"`
@@ -25,7 +25,7 @@ type ProductResponse struct {
 	Name   string `json:"name" validate:"required"`
 	Description string `json:"description" validate:"required,min=10"`
 	Price  decimal.Decimal  `json:"price" validate:"required"`
-	Currency string `json:"currency" validate:"required,gte=3"`
+	Currency string `json:"currency" validate:"required,len=3"`
 	StockQuantity int `json:"stock_quantity" gorm:"column:stock_quantity"`
 	Active bool `json:"active"`
 	CreatedAt time.Time `json:"created_at" gorm:"column:created_at"`

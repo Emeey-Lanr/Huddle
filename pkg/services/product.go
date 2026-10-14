@@ -221,6 +221,9 @@ func UpdateProduct(db *gorm.DB, rdb *redis.Client, publicProductId, adminId stri
 	if req.Price != nil && req.Price.IsNegative() {
 		return nil, &utility.AppError{StatusCode: http.StatusBadRequest, Message: "Price cannot be negative", Err: errors.New("negative price")}
 	}
+	if req.Currency != "" && len(req.Currency) != 3 {
+		return nil, &utility.AppError{StatusCode: http.StatusBadRequest, Message: "currency must be exactly 3 characters", Err: errors.New("invalid currency")}
+	}
 	if req.StockQuantity != nil && *req.StockQuantity < 0 {
 		return nil, &utility.AppError{StatusCode: http.StatusBadRequest, Message: "Stock quantity cannot be negative", Err: errors.New("negative stock")}
 	}

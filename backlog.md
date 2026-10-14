@@ -57,7 +57,7 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
   `c.SetCookie(... secure=false ...)` with no `SameSite`.
   Done when: cookie is `Secure` + `SameSite=None` in production. Set `APP_ENV=production` in production; anything else gives `SameSite=Lax` for http://localhost.
 
-- [ ] **2.7 Validation messages**
+- [x] **2.7 Validation messages**
   `ValidationErrors` says "Password length…" for every `min` tag, has no message for `gte`/`len`, and panics if the error isn't `validator.ValidationErrors`. Currency uses `gte=3` instead of `len=3`.
 
 ---

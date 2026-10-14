@@ -130,7 +130,7 @@
     },
     "responses": {
       "BadRequest": {
-        "description": "Invalid request body, query or values",
+        "description": "Invalid request body, query or values. For validation failures, `error` is a JSON object of field -> message, e.g. {\"currency\":\"currency must be exactly 3 characters\"}",
         "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
       },
       "Unauthorized": {
@@ -327,7 +327,7 @@
                   "name": { "type": "string", "example": "Ankara bag" },
                   "description": { "type": "string", "minLength": 10, "example": "Handmade ankara tote bag" },
                   "price": { "type": "number", "example": 15000 },
-                  "currency": { "type": "string", "example": "NGN" },
+                  "currency": { "type": "string", "minLength": 3, "maxLength": 3, "example": "NGN" },
                   "stock_quantity": { "type": "integer", "example": 10 }
                 }
               }
@@ -462,7 +462,7 @@
                   "name": { "type": "string" },
                   "description": { "type": "string" },
                   "price": { "type": "number", "minimum": 0, "example": 18000 },
-                  "currency": { "type": "string" },
+                  "currency": { "type": "string", "minLength": 3, "maxLength": 3 },
                   "stock_quantity": { "type": "integer", "minimum": 0 },
                   "active": { "type": "boolean", "description": "false hides the product from shoppers" }
                 }

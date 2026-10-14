@@ -252,3 +252,14 @@ func TestGetAProduct_NotFound(t *testing.T) {
 		t.Errorf("existing product: %s", err.Message)
 	}
 }
+
+func TestUpdateProduct_RejectsBadCurrency(t *testing.T) {
+	e := setupProduct(t)
+	if _, err := UpdateProduct(e.db, e.rdb, e.product.PublicId, e.adminId, model.ProductUpdate{Currency: "NGNX"}); err == nil || err.StatusCode != http.StatusBadRequest {
+		t.Errorf("err = %+v, want 400", err)
+	}
+	got, err := UpdateProduct(e.db, e.rdb, e.product.PublicId, e.adminId, model.ProductUpdate{Currency: "USD"})
+	if err != nil || got.Currency != "USD" {
+		t.Errorf("valid currency: got %+v, err %+v", got, err)
+	}
+}

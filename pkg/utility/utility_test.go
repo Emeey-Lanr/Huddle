@@ -1,11 +1,11 @@
 package utility
 
 import (
-	"strings"
+	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
-	"github.com/go-playground/validator/v10"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
@@ -157,21 +157,66 @@ func TestStringToUUID(t *testing.T) {
 	}
 }
 
-func TestValidationErrors(t *testing.T) {
-	type req struct {
-		Email    string `validate:"required,email"`
-		Password string `validate:"required,min=6"`
-		Name     string `validate:"required"`
+func validationMap(t *testing.T, v any) map[string]string {
+	t.Helper()
+	err := Validate.Struct(v)
+	if err == nil {
+		t.Fatalf("expected validation error for %+v", v)
 	}
-	err := Validate.Struct(req{Email: "nope", Password: "123"})
-	if _, ok := err.(validator.ValidationErrors); !ok {
-		t.Fatalf("expected validator.ValidationErrors, got %T", err)
+	got := map[string]string{}
+	if jsonErr := json.Unmarshal([]byte(ValidationErrors(err).Error()), &got); jsonErr != nil {
+		t.Fatalf("ValidationErrors did not return a JSON object: %v", jsonErr)
+	}
+	return got
+}
+
+func TestValidationErrors_Messages(t *testing.T) {
+	type req struct {
+		Email       string   `json:"email" validate:"required,email"`
+		Password    string   `json:"password" validate:"required,min=6"`
+		Name        string   `json:"name" validate:"required"`
+		Description string   `json:"store_description" validate:"min=10"`
+		Currency    string   `json:"currency" validate:"len=3"`
+		Quantity    int      `json:"quantity" validate:"gte=1"`
+		Tags        []string `json:"tags" validate:"max=2"`
+		Code        string   `json:"code" validate:"uppercase"`
+		NoJSONTag   string   `validate:"required"`
+	}
+	got := validationMap(t, req{Email: "nope", Password: "123", Description: "short", Currency: "NGNX", Tags: []string{"a", "b", "c"}, Code: "abc"})
+
+	want := map[string]string{
+		"email":             "email must be a valid email address",
+		"password":          "password must be at least 6 characters",
+		"name":              "name is required",
+		"store_description": "store_description must be at least 10 characters",
+		"currency":          "currency must be exactly 3 characters",
+		"quantity":          "quantity must be at least 1",
+		"tags":              "tags must be at most 2 items",
+		"code":              "code is invalid (uppercase)",
+		"NoJSONTag":         "NoJSONTag is required",
+	}
+	for field, msg := range want {
+		if got[field] != msg {
+			t.Errorf("%s: got %q, want %q", field, got[field], msg)
+		}
+	}
+	if len(got) != len(want) {
+		t.Errorf("got %d errors, want %d: %v", len(got), len(want), got)
+	}
+}
+
+// A non-validation error (e.g. passing a non-struct) used to panic.
+func TestValidationErrors_OtherErrorReturnedUnchanged(t *testing.T) {
+	err := Validate.Struct(42)
+	if err == nil {
+		t.Fatal("expected an error validating a non-struct")
+	}
+	if got := ValidationErrors(err); got != err {
+		t.Errorf("got %v, want the original error", got)
 	}
 
-	msg := ValidationErrors(err).Error()
-	for _, want := range []string{"Invalid email format", "Name is required", "at least 6"} {
-		if !strings.Contains(msg, want) {
-			t.Errorf("message %q missing %q", msg, want)
-		}
+	plain := errors.New("boom")
+	if got := ValidationErrors(plain); got != plain {
+		t.Errorf("got %v, want the original error", got)
 	}
 }
