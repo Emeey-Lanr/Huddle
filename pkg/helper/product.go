@@ -33,7 +33,7 @@ func GetInternalStoreId(rdb *redis.Client, db *gorm.DB,  storePublicId string ) 
 	      var store model.Stores
 	   if  err :=  db.Where("store_id = ?", storePublicId).First(&store).Error; err != nil{
 		 if errors.Is(err, gorm.ErrRecordNotFound){
-           return nil, &utility.AppError{StatusCode: http.StatusUnauthorized, Message: "Store Creation not allowed", Err: errors.New("Invalid StoreId")}
+           return nil, &utility.AppError{StatusCode: http.StatusNotFound, Message: "Store not found", Err: errors.New("Invalid StoreId")}
 		 }
 		 return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server", Err: err}
 	   }
@@ -96,7 +96,7 @@ func ValidateProductId(db *gorm.DB, rdb *redis.Client, publicId string)(*uuid.UU
 		if err == redis.Nil{
 			if 	err := db.Where("public_id = ?", publicId).First(&product).Error; err != nil{
 	      if errors.Is(err, gorm.ErrRecordNotFound){
-		  return  nil, &utility.AppError{StatusCode: http.StatusUnauthorized, Message: "Invalid Id", Err: err}
+		  return  nil, &utility.AppError{StatusCode: http.StatusNotFound, Message: "Product not found", Err: err}
 	    }else{
 		 return  nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Err", Err: err}
 		}
@@ -109,6 +109,7 @@ func ValidateProductId(db *gorm.DB, rdb *redis.Client, publicId string)(*uuid.UU
 	 return &product.Id, nil
 
 	 }
+		return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Err", Err: err}
 	}
 
    uuidInternalProductId, err := utility.StringToUUID(internalProductId)

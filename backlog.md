@@ -45,7 +45,7 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
   Hard-coded `Limit(10)`, `page`/`limit` ignored, `max-price` tag should be `max_price`, inactive products returned.
   Done when: `page`/`limit` work (with a max limit), `max_price` works, inactive products hidden from public listing.
 
-- [ ] **2.4 Correct status codes**
+- [x] **2.4 Correct status codes**
   Unknown product returns 401 (`ValidateProductId`) or 500 "User Not Found" (`GetAProduct`); duplicate product returns 401.
   Done when: not found → 404, duplicate → 409.
 

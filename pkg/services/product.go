@@ -46,7 +46,7 @@ func AddProduct (req model.Products, db *gorm.DB , rdb *redis.Client, adminId, s
 	 }
 
 	 if exists && helperErr == nil{
-		return nil, &utility.AppError{StatusCode: http.StatusUnauthorized, Message: "Product already exists", Err: errors.New("Product already exists")}
+		return nil, &utility.AppError{StatusCode: http.StatusConflict, Message: "Product already exists", Err: errors.New("Product already exists")}
 	 }
 
 	 productId := utility.GenerateUUID()
@@ -164,7 +164,7 @@ func GetAProduct (db *gorm.DB, rdb *redis.Client, publicId, adminId string) (*mo
 	 err := db.Model(&model.Products{}).Omit("id, store_id").Where("id = ? AND public_id = ?", internalId, publicId).First(&product).Error 
 	 if err != nil{
 		 if errors.Is(err, gorm.ErrRecordNotFound){
-               	return nil, nil,  &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "User Not Found", Err:err}
+               	return nil, nil,  &utility.AppError{StatusCode: http.StatusNotFound, Message: "Product not found", Err:err}
 		 }
 		 return nil, nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err:err}
 	 }

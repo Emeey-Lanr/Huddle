@@ -223,3 +223,32 @@ func TestGetAllProducts_OtherAdminForbidden(t *testing.T) {
 		t.Errorf("err = %+v, want 403", err)
 	}
 }
+
+func TestAddProduct_DuplicateNameConflict(t *testing.T) {
+	db := testutil.NewDB(t)
+	_, rdb := testutil.NewRedis(t)
+	admin := testutil.SeedAdmin(t, db)
+	store := testutil.SeedStore(t, db, admin.Id)
+	req := model.Products{Name: "Ankara bag", Description: "Handmade ankara bag", Price: decimal.NewFromInt(15000), Currency: "NGN", StockQuantity: 5}
+
+	if _, err := AddProduct(req, db, rdb, admin.Id.String(), store.StoreId); err != nil {
+		t.Fatalf("first add: %s %v", err.Message, err.Err)
+	}
+	if _, err := AddProduct(req, db, rdb, admin.Id.String(), store.StoreId); err == nil || err.StatusCode != http.StatusConflict {
+		t.Errorf("duplicate: err = %+v, want 409", err)
+	}
+	if _, err := AddProduct(req, db, rdb, admin.Id.String(), "str-missing"); err == nil || err.StatusCode != http.StatusNotFound {
+		t.Errorf("unknown store: err = %+v, want 404", err)
+	}
+}
+
+func TestGetAProduct_NotFound(t *testing.T) {
+	e := setupProduct(t)
+
+	if _, _, err := GetAProduct(e.db, e.rdb, "prod_missing", e.adminId); err == nil || err.StatusCode != http.StatusNotFound {
+		t.Errorf("err = %+v, want 404", err)
+	}
+	if _, _, err := GetAProduct(e.db, e.rdb, e.product.PublicId, e.adminId); err != nil {
+		t.Errorf("existing product: %s", err.Message)
+	}
+}
