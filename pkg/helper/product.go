@@ -219,9 +219,12 @@ func UploadImagesToCloudinary (images []*multipart.FileHeader)([]string,[]string
 
 
 
+// deleteFromCloudinary is a variable so tests can run without Cloudinary.
+var deleteFromCloudinary = cloudinary.DeleteImageFromCloudinary
+
 func DeleteImagesInCloudinary (imgPublicId []string)*utility.AppError{
 	for _, val := range imgPublicId{
-      if err :=  cloudinary.DeleteImageFromCloudinary(val); err != nil{
+      if err :=  deleteFromCloudinary(val); err != nil{
 		return &utility.AppError{StatusCode: http.StatusInternalServerError, Message:"Internal Server Error", Err: err}
 	  }
 	}
@@ -243,10 +246,11 @@ func SaveImagesToDb (db *gorm.DB, imgPublicId, imgURL []string , productId uuid.
   })
   
   if err != nil{
+	 // Remove the uploaded files so they don't sit unused in Cloudinary.
 	 if  helperErr := DeleteImagesInCloudinary(imgPublicId); helperErr != nil{
         log.Println(err, imgPublicId)  //we need the log so we can manually delete failed images
-	    return &utility.AppError{StatusCode: http.StatusInternalServerError, Message:"Internal Server Error", Err: err}
 	}
+	return &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Couldn't save images", Err: err}
   }
 
  return nil

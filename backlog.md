@@ -37,7 +37,7 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
   `pkg/services/product.go:221` — `StockQuantity >= 0` is always true when the field is omitted.
   Done when: fields left out of the request are not changed (use pointer fields like `Active`).
 
-- [ ] **2.2 Failed image save reports success**
+- [x] **2.2 Failed image save reports success**
   `pkg/helper/product.go:217` — if the DB save fails but Cloudinary cleanup works, the function returns `nil`.
   Done when: the DB error is always returned.
 
