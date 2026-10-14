@@ -90,7 +90,10 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
 - [ ] **4.3 API key middleware** — validate the hashed key from `stores.api_key`.
 - [ ] **4.4 CORS** — allow storefront domains to call the API. Must send `Access-Control-Allow-Credentials: true` with the exact origin (not `*`), and storefronts must use `credentials: "include"`, or the cart cookie is never sent.
 - [ ] **4.5 Orders** — `orders` + `order_items` tables, `POST /orders/checkout` (snapshot prices, reserve stock), `GET /orders`, `GET /orders/:id`, order status.
-- [ ] **4.6 Paystack payments** — initialize payment, verify, webhook with signature check, mark order paid.
+- [ ] **4.6 Bachs payments** ([docs.bachs.io](https://docs.bachs.io/introduction)) — create a checkout session per order (success/cancel URLs), mark the order paid only from a signed webhook (`collection.succeeded`), handle `collection.failed` / `checkout.expired`.
+  - Sandbox and live are separate: base URL (`sandbox-api.bachs.io` / `api.bachs.io`), API key, webhook secret. Keep them in env vars, sandbox by default.
+  - Amounts are decimal strings (e.g. `"15000.00"`), matching how Huddle already stores prices.
+  - Read the official OpenAPI reference (`docs.bachs.io/docs/openapi/openapi.json`) before building; confirm webhook signature scheme, idempotency and refunds.
 - [ ] **4.7 Seller order notifications** — notify the seller on each paid order (email first, WhatsApp later).
 
 ---
