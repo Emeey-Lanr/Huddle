@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Huddle Multi-Tenant E-Commerce API",
-    "description": "API for the Huddle multi-tenant e-commerce backend.\n\n**Auth.** Tokens are JWTs that last 1 hour and carry a role. Admin routes need an **admin** token (from `/admin/signup` or `/admin/signin`). `/customer/profile` needs a **customer** token (from `/customer/signup` or `/customer/signin`). Using the wrong role returns 403.\n\n**Responses.** Every response uses the same envelope: `{ success, message, data?, error? }`.\n\n**Money.** Prices are returned as decimal strings, e.g. `\"15000\"` or `\"1500.50\"`. Requests accept a number or a string.\n\n**Rate limit.** Sign-up and sign-in routes allow 60 requests per minute per IP, then return 429.",
-    "version": "1.2.0"
+    "description": "API for the Huddle multi-tenant e-commerce backend.\n\n**Auth.** Tokens are JWTs that last 1 hour and carry a role. Admin routes need an **admin** token (from `/admin/signup` or `/admin/signin`). `/customer/profile` needs a **customer** token (from `/customer/signup` or `/customer/signin`). Using the wrong role returns 403.\n\n**Responses.** Every response uses the same envelope: `{ success, message, data?, error? }`.\n\n**Money.** Prices are returned as decimal strings, e.g. `\"15000\"` or `\"1500.50\"`. Requests accept a number or a string.\n\n**Rate limit.** Sign-up and sign-in routes allow 60 requests per minute per IP, then return 429.\n\n**Storefronts.** Storefront websites call `/storefront/*` and `/cart` with the store's key in the `X-Store-Key` header. The key is **publishable** (it is visible in storefront pages): it only identifies the store for public actions and never grants seller access.\n\n**CORS.** Browser origins listed in `CORS_ALLOWED_ORIGINS` (exact origins or wildcards like `https://*.huddle.ng`) may call the API with credentials; storefronts must send requests with `credentials: \"include\"` so the cart cookie is kept.",
+    "version": "1.3.0"
   },
   "servers": [
     {
@@ -29,8 +29,12 @@
       "description": "Shopper accounts within a store"
     },
     {
+      "name": "Storefront",
+      "description": "Public, read-only routes for storefront websites (X-Store-Key)"
+    },
+    {
       "name": "Cart",
-      "description": "Shopping cart, one per store per session"
+      "description": "Shopping cart for storefronts (X-Store-Key); one cart per store per session"
     }
   ],
   "components": {
@@ -51,7 +55,13 @@
         "type": "apiKey",
         "in": "cookie",
         "name": "cart_session",
-        "description": "Set by POST /cart/ (HttpOnly, 7 days). Holds one cart per store. With APP_ENV=production it is Secure and SameSite=None so storefronts on other domains can send it; otherwise SameSite=Lax."
+        "description": "Set by POST /cart (HttpOnly, 7 days). Holds one cart per store. With APP_ENV=production it is Secure and SameSite=None so storefronts on other domains can send it; otherwise SameSite=Lax."
+      },
+      "StoreKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Store-Key",
+        "description": "The store's publishable key (the api_key returned once by POST /store/create)"
       }
     },
     "parameters": {
@@ -283,6 +293,23 @@
             "format": "date-time"
           }
         }
+      },
+      "StorefrontStore": {
+        "type": "object",
+        "properties": {
+          "store_id": {
+            "type": "string",
+            "example": "str-2eb6c9490f2042139a1c5e7d8b6f4a21"
+          },
+          "store_name": {
+            "type": "string",
+            "example": "Chioma's Bags"
+          },
+          "store_description": {
+            "type": "string",
+            "example": "Handmade ankara bags and accessories"
+          }
+        }
       }
     },
     "responses": {
@@ -365,6 +392,16 @@
                   "$ref": "#/components/schemas/Cart"
                 }
               }
+            }
+          }
+        }
+      },
+      "InvalidStoreKey": {
+        "description": "Missing or invalid X-Store-Key",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
             }
           }
         }
@@ -529,7 +566,7 @@
           "Store"
         ],
         "summary": "Create a store",
-        "description": "The `api_key` is shown **only once** in this response; only a hash is stored.",
+        "description": "The `api_key` is shown **only once** in this response; only a hash is stored. It is the store's **publishable storefront key**: storefront pages send it as `X-Store-Key`, so treat it as public.",
         "security": [
           {
             "AdminAuth": []
@@ -1598,7 +1635,7 @@
         }
       }
     },
-    "/cart/": {
+    "/cart": {
       "post": {
         "tags": [
           "Cart"
@@ -1606,14 +1643,12 @@
         "summary": "Add a product to this store's cart",
         "description": "Name, price and currency always come from the database. Adding a product already in the cart increases its quantity. Sets the `cart_session` cookie if missing.",
         "security": [
-          {},
           {
+            "StoreKey": []
+          },
+          {
+            "StoreKey": [],
             "CartSession": []
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/XStoreIdHeader"
           }
         ],
         "requestBody": {
@@ -1649,7 +1684,7 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/InvalidStoreKey"
           },
           "404": {
             "description": "Store not found, or product not found / hidden in this store",
@@ -1680,14 +1715,12 @@
         "summary": "Get this store's cart",
         "description": "Returns an empty cart when there is no session yet.",
         "security": [
-          {},
           {
+            "StoreKey": []
+          },
+          {
+            "StoreKey": [],
             "CartSession": []
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/XStoreIdHeader"
           }
         ],
         "responses": {
@@ -1695,7 +1728,7 @@
             "$ref": "#/components/responses/CartOk"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/InvalidStoreKey"
           }
         }
       },
@@ -1706,14 +1739,12 @@
         "summary": "Empty this store's cart",
         "description": "Carts for other stores in the same session are kept.",
         "security": [
-          {},
           {
+            "StoreKey": []
+          },
+          {
+            "StoreKey": [],
             "CartSession": []
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/XStoreIdHeader"
           }
         ],
         "responses": {
@@ -1721,7 +1752,7 @@
             "description": "Cart cleared"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/InvalidStoreKey"
           }
         }
       }
@@ -1734,13 +1765,11 @@
         "summary": "Set the quantity of a product in this store's cart",
         "security": [
           {
+            "StoreKey": [],
             "CartSession": []
           }
         ],
         "parameters": [
-          {
-            "$ref": "#/components/parameters/XStoreIdHeader"
-          },
           {
             "$ref": "#/components/parameters/ProductIdPath"
           }
@@ -1773,7 +1802,7 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/InvalidStoreKey"
           },
           "404": {
             "description": "No cart session, product not in this store, or product not in the cart",
@@ -1804,13 +1833,11 @@
         "summary": "Remove a product from this store's cart",
         "security": [
           {
+            "StoreKey": [],
             "CartSession": []
           }
         ],
         "parameters": [
-          {
-            "$ref": "#/components/parameters/XStoreIdHeader"
-          },
           {
             "$ref": "#/components/parameters/ProductIdPath"
           }
@@ -1820,10 +1847,237 @@
             "$ref": "#/components/responses/CartOk"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/InvalidStoreKey"
           },
           "404": {
             "description": "No cart session, or product not in the cart",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/storefront/store": {
+      "get": {
+        "tags": [
+          "Storefront"
+        ],
+        "summary": "Public store info",
+        "security": [
+          {
+            "StoreKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Store",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Store retrieved successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/StorefrontStore"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidStoreKey"
+          }
+        }
+      }
+    },
+    "/storefront/products": {
+      "get": {
+        "tags": [
+          "Storefront"
+        ],
+        "summary": "List the store's visible products",
+        "description": "Only active products. Same paging, price filters and sorting as the admin list.",
+        "security": [
+          {
+            "StoreKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "description": "Values above 100 are capped at 100"
+          },
+          {
+            "name": "min_price",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "max_price",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "created_at",
+                "price",
+                "name"
+              ],
+              "default": "created_at"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "desc",
+                "asc"
+              ],
+              "default": "desc"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of products",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Products retrieved successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ProductList"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidStoreKey"
+          }
+        }
+      }
+    },
+    "/storefront/products/{id}": {
+      "get": {
+        "tags": [
+          "Storefront"
+        ],
+        "summary": "Get a visible product with its images",
+        "security": [
+          {
+            "StoreKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProductIdPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Product found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Product Found"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "product": {
+                          "$ref": "#/components/schemas/Product"
+                        },
+                        "images": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "description": "Cloudinary image id",
+                                "example": "img_7c1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a"
+                              },
+                              "img_url": {
+                                "type": "string",
+                                "format": "uri"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidStoreKey"
+          },
+          "404": {
+            "description": "Product not found, hidden, or in another store",
             "content": {
               "application/json": {
                 "schema": {

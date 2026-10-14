@@ -14,6 +14,8 @@ func RoutesSetup(db *gorm.DB, rdb *redis.Client) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(middleware.AuditLogMiddleware())
+	// Before any route: answers CORS preflight requests from storefronts.
+	r.Use(middleware.CORSMiddleware())
 
 	// Entry Route
 	r.GET("/", func(ctx *gin.Context) {
@@ -26,6 +28,7 @@ func RoutesSetup(db *gorm.DB, rdb *redis.Client) *gin.Engine {
 	ProductRouter(r, db, rdb)
 	CustomerRoutes(r, db, rdb)
 	CartRoutes(r, db, rdb)
+	StorefrontRoutes(r, db)
 
 	// Serves API documentation
 	doc.SwaggerDocs(r)

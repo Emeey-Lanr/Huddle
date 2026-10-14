@@ -26,6 +26,13 @@ type StoreResponse struct {
 	UpdatedAt        time.Time `json:"updated_at" gorm:"column:updated_at"`
 }
 
+// StorefrontStore is the public store info shoppers see.
+type StorefrontStore struct {
+	StoreId          string `json:"store_id"`
+	StoreName        string `json:"store_name"`
+	StoreDescription string `json:"store_description"`
+}
+
 // StoreUpdate request; empty fields are left unchanged.
 type StoreUpdate struct {
 	StoreName        string `json:"store_name" validate:"omitempty,max=150"`

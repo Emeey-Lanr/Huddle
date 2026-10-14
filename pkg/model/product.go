@@ -55,6 +55,17 @@ type ProductQuery struct {
 	Order string `form:"order"` // desc (default) or asc
 }
 
+// StorefrontProductQuery is the public product list query. The store comes
+// from the X-Store-Key header and only active products are ever returned.
+type StorefrontProductQuery struct {
+	Page     int     `form:"page"`
+	Limit    int     `form:"limit"`
+	MinPrice float64 `form:"min_price"`
+	MaxPrice float64 `form:"max_price"`
+	Sort     string  `form:"sort"`
+	Order    string  `form:"order"`
+}
+
 type ProductListResponse struct {
 	Items []ProductResponse `json:"items"`
 	Page  int               `json:"page"`

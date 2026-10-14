@@ -87,9 +87,11 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
 ## 4. Store features needed to sell
 
 - [x] **4.1 Store management** — `GET /store/stores` (list mine), `GET /store/:id`, `PUT /store/:id` (owner only; never returns the API key).
-- [ ] **4.2 Public storefront API** — `/storefront/*` routes authenticated with the store API key (no admin token): list products, product detail, store info. Reuse `helper.GetAllProductQueryChain` with `Active` forced to `true` so hidden products never show.
-- [ ] **4.3 API key middleware** — validate the hashed key from `stores.api_key`.
-- [ ] **4.4 CORS** — allow storefront domains to call the API. Must send `Access-Control-Allow-Credentials: true` with the exact origin (not `*`), and storefronts must use `credentials: "include"`, or the cart cookie is never sent.
+- [x] **4.2 Public storefront API** — `GET /storefront/store`, `GET /storefront/products` (active only, paging/filters/sort), `GET /storefront/products/:id`.
+- [x] **4.3 API key middleware** — `X-Store-Key` header, looked up by hash. Also used by `/cart` (replaces `X-Store-Id`). The key is **publishable** (visible in storefront pages): never let it unlock seller actions.
+- [x] **4.4 CORS** — `CORS_ALLOWED_ORIGINS` (comma-separated exact origins or `https://*.huddle.ng` wildcards), credentials allowed, other origins' preflights get 403. Storefronts must use `credentials: "include"`. Cart paths have no trailing slash (`/cart`) because browsers don't follow redirects during CORS.
+- [ ] **4.4a Regenerate store key** — the key is shown once at store creation; a seller who loses it has no way to get a new one. Add `POST /store/:id/key` (owner only) that issues a new key and invalidates the old one.
+- [ ] **4.4b Store domains in the database** — keeping every seller's custom domain in `CORS_ALLOWED_ORIGINS` won't scale to 200 stores. Store each store's domain(s) and check origins against them (subdomains of the Huddle domain can stay a wildcard).
 - [ ] **4.5 Orders** — `orders` + `order_items` tables, `POST /orders/checkout` (snapshot prices, reserve stock), `GET /orders`, `GET /orders/:id`, order status.
 - [ ] **4.6 Bachs payments** ([docs.bachs.io](https://docs.bachs.io/introduction)) — create a checkout session per order (success/cancel URLs), mark the order paid only from a signed webhook (`collection.succeeded`), handle `collection.failed` / `checkout.expired`.
   - Sandbox and live are separate: base URL (`sandbox-api.bachs.io` / `api.bachs.io`), API key, webhook secret. Keep them in env vars, sandbox by default.
@@ -103,7 +105,7 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
 
 - [ ] **5.1 Health check** — `GET /healthz` checking Postgres and Redis.
 - [ ] **5.2 Graceful shutdown + server timeouts** — replace `r.Run` with `http.Server`.
-- [ ] **5.3 Config** — port from env, Gin release mode in production. Set `APP_ENV=production` (needed for the cart cookie, see 2.6).
+- [ ] **5.3 Config** — port from env, Gin release mode in production. Set `APP_ENV=production` (cart cookie, see 2.6) and `CORS_ALLOWED_ORIGINS` (see 4.4).
 - [ ] **5.4 Cloudinary client created once** — not per upload (`internal/cloudinary/client.go`).
 - [ ] **5.5 Rate limiter in Redis** — so it works across more than one server.
 - [ ] **5.6 Dockerfile + docker-compose** — API, Postgres, Redis.

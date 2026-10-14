@@ -82,6 +82,13 @@ func (s *server) signupAdmin(username string) string {
 // createStore creates a store through the API and returns its public id.
 func (s *server) createStore(token, name string) string {
 	s.t.Helper()
+	id, _ := s.createStoreWithKey(token, name)
+	return id
+}
+
+// createStoreWithKey also returns the store's publishable key.
+func (s *server) createStoreWithKey(token, name string) (string, string) {
+	s.t.Helper()
 	code, env := s.do(http.MethodPost, "/store/create", token, map[string]string{
 		"store_name": name, "store_description": "Handmade goods from Lagos",
 	})
@@ -90,7 +97,55 @@ func (s *server) createStore(token, name string) string {
 	}
 	var d struct {
 		StoreId string `json:"store_id"`
+		ApiKey  string `json:"api_key"`
 	}
 	s.data(env, &d)
-	return d.StoreId
+	return d.StoreId, d.ApiKey
+}
+
+// request sends a request with custom headers and cookies and returns the recorder.
+func (s *server) request(method, path string, headers map[string]string, cookies []*http.Cookie, body any) *httptest.ResponseRecorder {
+	s.t.Helper()
+	var buf bytes.Buffer
+	if body != nil {
+		json.NewEncoder(&buf).Encode(body)
+	}
+	req := httptest.NewRequest(method, path, &buf)
+	req.Header.Set("Content-Type", "application/json")
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	w := httptest.NewRecorder()
+	s.r.ServeHTTP(w, req)
+	return w
+}
+
+func decode(t *testing.T, w *httptest.ResponseRecorder, v any) envelope {
+	t.Helper()
+	var env envelope
+	if err := json.Unmarshal(w.Body.Bytes(), &env); err != nil {
+		t.Fatalf("decode %s: %v", w.Body.String(), err)
+	}
+	if v != nil {
+		if err := json.Unmarshal(env.Data, v); err != nil {
+			t.Fatalf("decode data %s: %v", env.Data, err)
+		}
+	}
+	return env
+}
+
+// addProduct creates a product through the admin API and returns its public id.
+func (s *server) addProduct(token, storeId, name string, price, stock int) string {
+	s.t.Helper()
+	w := s.request(http.MethodPost, "/product/", map[string]string{"Authorization": "Bearer " + token, "X-Store-Id": storeId}, nil,
+		map[string]any{"name": name, "description": "A lovely handmade item", "price": price, "currency": "NGN", "stock_quantity": stock})
+	var d struct{ Id string }
+	env := decode(s.t, w, &d)
+	if w.Code != http.StatusCreated {
+		s.t.Fatalf("add product %s: %d %s %s", name, w.Code, env.Message, env.Error)
+	}
+	return d.Id
 }
