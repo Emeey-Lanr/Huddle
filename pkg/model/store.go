@@ -16,3 +16,18 @@ type Stores struct {
 	CreatedAt time.Time `json:"created_at" gorm:"column:created_at"`
 	UpdatedAt time.Time `json:"updated_at" gorm:"column:updated_at"` 	
 }
+
+// StoreResponse is what admins see; it never includes the API key or internal ids.
+type StoreResponse struct {
+	StoreId          string    `json:"store_id" gorm:"column:store_id"`
+	StoreName        string    `json:"store_name" gorm:"column:store_name"`
+	StoreDescription string    `json:"store_description" gorm:"column:store_description"`
+	CreatedAt        time.Time `json:"created_at" gorm:"column:created_at"`
+	UpdatedAt        time.Time `json:"updated_at" gorm:"column:updated_at"`
+}
+
+// StoreUpdate request; empty fields are left unchanged.
+type StoreUpdate struct {
+	StoreName        string `json:"store_name" validate:"omitempty,max=150"`
+	StoreDescription string `json:"store_description" validate:"omitempty,min=10"`
+}

@@ -10,6 +10,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
@@ -62,4 +63,73 @@ func (b *StoreBase) Create(c *gin.Context) {
 		"api_key":    apiKey,
 		"created_at": data.CreatedAt,
 	})
+}
+
+// adminUUID reads the admin id set by AuthMiddleware.
+func adminUUID(c *gin.Context) (uuid.UUID, bool) {
+	id, err := utility.StringToUUID(c.GetString("adminId"))
+	if err != nil {
+		response.Error(c, http.StatusUnauthorized, "Unauthorized access", err)
+		return uuid.Nil, false
+	}
+	return id, true
+}
+
+func (b *StoreBase) List(c *gin.Context) {
+	adminId, ok := adminUUID(c)
+	if !ok {
+		return
+	}
+
+	stores, serviceErr := services.ListStores(b.Db, adminId)
+	if serviceErr != nil {
+		response.Error(c, serviceErr.StatusCode, serviceErr.Message, serviceErr.Err)
+		return
+	}
+
+	response.Success(c, "Stores retrieved successfully", stores)
+}
+
+func (b *StoreBase) Get(c *gin.Context) {
+	adminId, ok := adminUUID(c)
+	if !ok {
+		return
+	}
+
+	store, serviceErr := services.GetStore(b.Db, c.Param("id"), adminId)
+	if serviceErr != nil {
+		response.Error(c, serviceErr.StatusCode, serviceErr.Message, serviceErr.Err)
+		return
+	}
+
+	response.Success(c, "Store retrieved successfully", store)
+}
+
+func (b *StoreBase) Update(c *gin.Context) {
+	adminId, ok := adminUUID(c)
+	if !ok {
+		return
+	}
+	storeId := c.Param("id")
+
+	var req model.StoreUpdate
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, "Invalid request payload", err)
+		return
+	}
+
+	if err := utility.Validate.Struct(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, "Validation failed", utility.ValidationErrors(err))
+		return
+	}
+
+	store, serviceErr := services.UpdateStore(b.Db, storeId, adminId, req)
+	if serviceErr != nil {
+		audit.LogEvent(c.Request.Context(), "STORE_UPDATED", adminId.String(), storeId, "FAILED", map[string]interface{}{"error": serviceErr.Message})
+		response.Error(c, serviceErr.StatusCode, serviceErr.Message, serviceErr.Err)
+		return
+	}
+
+	audit.LogEvent(c.Request.Context(), "STORE_UPDATED", adminId.String(), storeId, "SUCCESS", nil)
+	response.Success(c, "Store updated successfully", store)
 }

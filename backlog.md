@@ -77,6 +77,7 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
 
 - [ ] **3.3 Controller/route tests**
   HTTP-level tests for each route: auth required, wrong owner → 403, bad payload → 400.
+  Started: `pkg/router/http_helpers_test.go` runs the full router on Postgres; store routes covered. Add the other routes as they are touched.
 
 - [x] **3.4 Keep Swagger in sync**
   `doc/swagger.json` is hand-written OpenAPI 3.0 (not generated), served at `/swagger/index.html`. Rewritten to match the code in Oct 2026. `pkg/router/swagger_test.go` fails if a route is added or removed without updating it, so update the file with every API change.
@@ -85,7 +86,7 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
 
 ## 4. Store features needed to sell
 
-- [ ] **4.1 Store management** — `GET /store/:id`, `PUT /store/:id`, list an admin's stores.
+- [x] **4.1 Store management** — `GET /store/stores` (list mine), `GET /store/:id`, `PUT /store/:id` (owner only; never returns the API key).
 - [ ] **4.2 Public storefront API** — `/storefront/*` routes authenticated with the store API key (no admin token): list products, product detail, store info. Reuse `helper.GetAllProductQueryChain` with `Active` forced to `true` so hidden products never show.
 - [ ] **4.3 API key middleware** — validate the hashed key from `stores.api_key`.
 - [ ] **4.4 CORS** — allow storefront domains to call the API. Must send `Access-Control-Allow-Credentials: true` with the exact origin (not `*`), and storefronts must use `credentials: "include"`, or the cart cookie is never sent.
