@@ -15,8 +15,8 @@ func TestMigrations_DownThenUp(t *testing.T) {
 
 	Migrate(t, db, "up")
 	db.Raw("SELECT count(*) FROM information_schema.tables WHERE table_schema = current_schema()").Scan(&tables)
-	if tables != 7 {
-		t.Errorf("%d tables after re-applying up migrations, want 7", tables)
+	if tables != 9 {
+		t.Errorf("%d tables after re-applying up migrations, want 9", tables)
 	}
 }
 
@@ -26,7 +26,7 @@ func TestMigrations_IndexesExist(t *testing.T) {
 		"admins_email_unique", "admins_username_unique", "stores_admin_store_name_unique",
 		"customers_store_email_unique", "products_store_name_unique", "products_public_id_unique",
 		"images_product_id_idx", "orders_store_created_idx", "orders_customer_idx", "orders_pending_expiry_idx",
-		"order_items_order_idx",
+		"order_items_order_idx", "payments_order_idx",
 	}
 	for _, name := range want {
 		var n int64

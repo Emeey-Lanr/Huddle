@@ -29,6 +29,7 @@ func RoutesSetup(db *gorm.DB, rdb *redis.Client) *gin.Engine {
 	CustomerRoutes(r, db, rdb)
 	CartRoutes(r, db, rdb)
 	StorefrontRoutes(r, db, rdb)
+	WebhookRoutes(r, db)
 
 	// Serves API documentation
 	doc.SwaggerDocs(r)

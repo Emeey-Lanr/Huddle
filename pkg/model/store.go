@@ -13,6 +13,8 @@ type Stores struct {
 	StoreDescription string `json:"store_description" validate:"required,min=10" gorm:"column:store_description"`
 	ApiKey string `json:"api_key" gorm:"column:api_key"`
 	StoreId string `json:"store_id" gorm:"column:store_id"`
+	// BachsAccountId is the seller's Bachs sub-account; never set from requests.
+	BachsAccountId *string `json:"-" gorm:"column:bachs_account_id"`
 	CreatedAt time.Time `json:"created_at" gorm:"column:created_at"`
 	UpdatedAt time.Time `json:"updated_at" gorm:"column:updated_at"` 	
 }

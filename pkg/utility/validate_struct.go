@@ -73,6 +73,8 @@ func validationMessage(e validator.FieldError) string {
 		return fmt.Sprintf("%s must be less than %s%s", field, param, unit)
 	case "len":
 		return fmt.Sprintf("%s must be exactly %s%s", field, param, unit)
+	case "http_url", "url":
+		return fmt.Sprintf("%s must be a full http(s) link", field)
 	case "oneof":
 		return fmt.Sprintf("%s must be one of: %s", field, strings.ReplaceAll(param, " ", ", "))
 	case "required_if":

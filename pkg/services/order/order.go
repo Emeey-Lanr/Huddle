@@ -438,3 +438,65 @@ func StartExpiryWorker(ctx context.Context, db *gorm.DB, interval time.Duration)
 		}
 	}()
 }
+
+// PaymentOutcome is what happened to an order when a payment for it arrived.
+type PaymentOutcome int
+
+const (
+	// PaymentApplied: the order is now paid.
+	PaymentApplied PaymentOutcome = iota
+	// PaymentDuplicate: the order was already paid (e.g. by another checkout or
+	// by the seller), so this money should be refunded.
+	PaymentDuplicate
+	// PaymentUnfillable: the order expired or was cancelled and its items are
+	// no longer in stock, so this money should be refunded.
+	PaymentUnfillable
+)
+
+// ApplyPayment marks an order paid inside tx once its payment is confirmed.
+// The order row is locked, so it can't race the expiry worker or a seller's
+// status change. A payment that arrives after the order expired or was
+// cancelled takes the stock back if every item is still available.
+func ApplyPayment(tx *gorm.DB, orderId uuid.UUID, now time.Time) (PaymentOutcome, error) {
+	var o model.Orders
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", orderId).First(&o).Error; err != nil {
+		return 0, err
+	}
+
+	switch o.Status {
+	case model.OrderPaid, model.OrderFulfilled:
+		return PaymentDuplicate, nil
+	case model.OrderExpired, model.OrderCancelled:
+		err := tx.Transaction(func(sp *gorm.DB) error {
+			var items []model.OrderItems
+			if err := sp.Where("order_id = ?", o.Id).Find(&items).Error; err != nil {
+				return err
+			}
+			for _, it := range items {
+				res := sp.Exec(`UPDATE products SET stock_quantity = stock_quantity - ?, updated_at = NOW()
+					WHERE id = ? AND stock_quantity >= ?`, it.Quantity, it.ProductId, it.Quantity)
+				if res.Error != nil {
+					return res.Error
+				}
+				// A deleted product (NULL id) matches no row either.
+				if res.RowsAffected == 0 {
+					return errUnfillable
+				}
+			}
+			return nil
+		})
+		if errors.Is(err, errUnfillable) {
+			return PaymentUnfillable, nil
+		}
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	err := tx.Model(&model.Orders{}).Where("id = ?", o.Id).
+		Updates(map[string]any{"status": model.OrderPaid, "paid_at": now, "updated_at": now}).Error
+	return PaymentApplied, err
+}
+
+// errUnfillable rolls back the savepoint when an item can't be re-reserved.
+var errUnfillable = errors.New("order can no longer be filled")

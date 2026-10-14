@@ -93,12 +93,12 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
 - [x] **4.4a Regenerate store key** — `POST /store/:id/key` (owner only) issues a new key and the old one stops working immediately.
 - [ ] **4.4b Store domains in the database** — keeping every seller's custom domain in `CORS_ALLOWED_ORIGINS` won't scale to 200 stores. Store each store's domain(s) and check origins against them (subdomains of the Huddle domain can stay a wildcard).
 - [x] **4.5 Orders** — `orders` + `order_items` tables. `POST /storefront/checkout` (guest or signed-in customer; copies prices, holds stock 30 min), `GET /storefront/orders/:id`, `GET /customer/orders`, seller `GET/PATCH /store/:id/orders[/:orderId]`. Unpaid orders expire every minute and their stock goes back on sale.
-- [ ] **4.6 Bachs payments** ([docs.bachs.io](https://docs.bachs.io/introduction)) — create a checkout session per order (success/cancel URLs), mark the order paid only from a signed webhook (`collection.succeeded`), handle `collection.failed` / `checkout.expired`.
-  - Sandbox and live are separate: base URL (`sandbox-api.bachs.io` / `api.bachs.io`), API key, webhook secret. Keep them in env vars, sandbox by default.
-  - Amounts are decimal strings (e.g. `"15000.00"`), matching how Huddle already stores prices.
-  - Create the Bachs checkout only for a `pending` order, with `expires_at` as its deadline. A payment that arrives after the order expired must not mark it paid: flag it for refund or re-reserve stock.
-  - Mark paid through the same locked status change the seller uses (`order.UpdateOrderStatus` logic), so a webhook and the expiry worker can't both win.
-  - Read the official OpenAPI reference (`docs.bachs.io/docs/openapi/openapi.json`) before building; confirm webhook signature scheme, idempotency and refunds.
+- [x] **4.6 Bachs payments** ([docs.bachs.io](https://docs.bachs.io/introduction)) — `POST /storefront/orders/:id/pay` opens a Bachs checkout charged to the store's Bachs sub-account (direct charge, `X-Account-Id`); `POST /webhooks/bachs` verifies the HMAC signature, handles each event once and marks the order paid only when amount, currency and account match. Late payments revive the order if stock allows, otherwise they are flagged `needs_refund`.
+  - Decided: **sellers collect** (each store's money lands in its own Bachs balance). Platform fee supported via `BACHS_PLATFORM_FEE_PERCENT`, 0 for now.
+  - Env: `BACHS_API_KEY`, `BACHS_WEBHOOK_SECRET`, `BACHS_BASE_URL` (default sandbox). Register the webhook with `event_source: all` so sub-account events arrive.
+  - Outside production a store without a sub-account is charged to the platform account (for sandbox testing); in production it gets 409.
+- [ ] **4.6b Seller Bachs onboarding** — create a Bachs sub-account per store (`POST /v1/accounts`), send the seller through hosted onboarding (`/v1/accounts/{id}/account-links`), save `stores.bachs_account_id`, show payment readiness. Read the Connect "Accounts", "Capabilities" and "Onboarding" docs first.
+- [ ] **4.6c Payment follow-ups for sellers** — show payment status on seller orders; list payments flagged `needs_refund` / `review`; refunds through `POST /v1/refunds` (with `X-Account-Id`).
 - [ ] **4.7 Seller order notifications** — notify the seller on each paid order (email first, WhatsApp later).
 
 ---
