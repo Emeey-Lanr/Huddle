@@ -118,7 +118,11 @@ func  AddImages (db *gorm.DB, rdb *redis.Client, images []*multipart.FileHeader,
    return &imageResponse, nil
 }
 
-func GetAllProducts (db *gorm.DB, rdb *redis.Client, queryData model.ProductQuery, adminId string) (*[]model.ProductResponse, *utility.AppError) {
+func GetAllProducts (db *gorm.DB, rdb *redis.Client, queryData model.ProductQuery, adminId string) (*model.ProductListResponse, *utility.AppError) {
+	if helperErr := helper.NormalizeProductQuery(&queryData); helperErr != nil {
+		return nil, helperErr
+	}
+
 	adminIdUUID, err := utility.StringToUUID(adminId)
 	if err != nil {
 		return nil, &utility.AppError{StatusCode: http.StatusUnauthorized, Message: "Invalid admin id", Err: err}
@@ -134,14 +138,20 @@ func GetAllProducts (db *gorm.DB, rdb *redis.Client, queryData model.ProductQuer
 	 }
 
 	   query :=  helper.GetAllProductQueryChain(db, *internalStoreId, queryData)
-	    var  products  []model.ProductResponse
-	   err = query.Find(&products).Error
+
+	   var total int64
+	   if err := query.Session(&gorm.Session{}).Count(&total).Error; err != nil {
+		 return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Err", Err: err}
+	   }
+
+	    products := []model.ProductResponse{}
+	   err = helper.PageProductQuery(query, queryData).Find(&products).Error
 	   if err != nil{
 		 return nil,  &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Err", Err: err}
 	   }
-	  
-   return  &products, nil
-} 
+
+   return  &model.ProductListResponse{Items: products, Page: queryData.Page, Limit: queryData.Limit, Total: total}, nil
+}
 
 
 func GetAProduct (db *gorm.DB, rdb *redis.Client, publicId, adminId string) (*model.ProductResponse, *[]model.ImagesResponse, *utility.AppError){

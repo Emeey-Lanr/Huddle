@@ -41,7 +41,7 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
   `pkg/helper/product.go:217` — if the DB save fails but Cloudinary cleanup works, the function returns `nil`.
   Done when: the DB error is always returned.
 
-- [ ] **2.3 Product list: pagination and filters**
+- [x] **2.3 Product list: pagination and filters**
   Hard-coded `Limit(10)`, `page`/`limit` ignored, `max-price` tag should be `max_price`, inactive products returned.
   Done when: `page`/`limit` work (with a max limit), `max_price` works, inactive products hidden from public listing.
 
@@ -85,7 +85,7 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
 ## 4. Store features needed to sell
 
 - [ ] **4.1 Store management** — `GET /store/:id`, `PUT /store/:id`, list an admin's stores.
-- [ ] **4.2 Public storefront API** — `/storefront/*` routes authenticated with the store API key (no admin token): list products, product detail, store info.
+- [ ] **4.2 Public storefront API** — `/storefront/*` routes authenticated with the store API key (no admin token): list products, product detail, store info. Reuse `helper.GetAllProductQueryChain` with `Active` forced to `true` so hidden products never show.
 - [ ] **4.3 API key middleware** — validate the hashed key from `stores.api_key`.
 - [ ] **4.4 CORS** — allow storefront domains to call the API.
 - [ ] **4.5 Orders** — `orders` + `order_items` tables, `POST /orders/checkout` (snapshot prices, reserve stock), `GET /orders`, `GET /orders/:id`, order status.

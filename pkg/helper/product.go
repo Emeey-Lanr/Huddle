@@ -147,11 +147,52 @@ func VerifyProductOwnership(db *gorm.DB, rdb *redis.Client, publicProductId, adm
 	return internalProductId, nil
 }
 
+const (
+	DefaultProductLimit = 20
+	MaxProductLimit     = 100
+)
+
+var productSortColumns = map[string]string{"created_at": "created_at", "price": "price", "name": "name"}
+
+// NormalizeProductQuery fills in paging defaults, caps the limit and rejects bad filters.
+func NormalizeProductQuery(q *model.ProductQuery) *utility.AppError {
+	if q.Page < 1 {
+		q.Page = 1
+	}
+	if q.Limit < 1 {
+		q.Limit = DefaultProductLimit
+	}
+	if q.Limit > MaxProductLimit {
+		q.Limit = MaxProductLimit
+	}
+	if q.MinPrice < 0 || q.MaxPrice < 0 {
+		return &utility.AppError{StatusCode: http.StatusBadRequest, Message: "Price filters cannot be negative", Err: errors.New("negative price filter")}
+	}
+	if q.MaxPrice > 0 && q.MinPrice > q.MaxPrice {
+		return &utility.AppError{StatusCode: http.StatusBadRequest, Message: "min_price cannot be greater than max_price", Err: errors.New("min_price > max_price")}
+	}
+	if q.Sort == "" {
+		q.Sort = "created_at"
+	}
+	if _, ok := productSortColumns[q.Sort]; !ok {
+		return &utility.AppError{StatusCode: http.StatusBadRequest, Message: "sort must be one of created_at, price, name", Err: errors.New("invalid sort")}
+	}
+	q.Order = strings.ToLower(q.Order)
+	if q.Order == "" {
+		q.Order = "desc"
+	}
+	if q.Order != "asc" && q.Order != "desc" {
+		return &utility.AppError{StatusCode: http.StatusBadRequest, Message: "order must be asc or desc", Err: errors.New("invalid order")}
+	}
+	return nil
+}
+
+// GetAllProductQueryChain applies the store and filter conditions (no paging or sorting).
 func GetAllProductQueryChain(db *gorm.DB, storeInternalId uuid.UUID, queryData model.ProductQuery)(*gorm.DB){
   query := db.Model(&model.Products{})
-  
+
   query = query.Where("store_id = ?", storeInternalId)
-  
+
   if queryData.MinPrice > 0 {
 	query = query.Where("price >= ?", queryData.MinPrice)
   }
@@ -160,9 +201,20 @@ func GetAllProductQueryChain(db *gorm.DB, storeInternalId uuid.UUID, queryData m
 	query = query.Where("price <= ?", queryData.MaxPrice)
   }
 
-  query = query.Omit("id, store_id").Limit(10)
+  if queryData.Active != nil {
+	query = query.Where("active = ?", *queryData.Active)
+  }
 
   return query
+}
+
+// PageProductQuery adds sorting and paging to a normalized query.
+func PageProductQuery(query *gorm.DB, q model.ProductQuery) *gorm.DB {
+	return query.
+		Order(productSortColumns[q.Sort] + " " + q.Order).
+		Order("id").
+		Offset((q.Page - 1) * q.Limit).
+		Limit(q.Limit)
 }
 
 

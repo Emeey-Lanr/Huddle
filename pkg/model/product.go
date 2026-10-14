@@ -48,10 +48,18 @@ type ProductQuery struct {
 	StoreId string `form:"store_id" binding:"required"`
 	Page int `form:"page"`
 	Limit int `form:"limit"`
-	MinPrice int `form:"min_price"`
-	MaxPrice int `form:"max-price"`
-	Sort string `form:"sort"`
-	Order string `form:"order"`
+	MinPrice float64 `form:"min_price"`
+	MaxPrice float64 `form:"max_price"`
+	Active *bool `form:"active"`
+	Sort string `form:"sort"`   // created_at (default), price, name
+	Order string `form:"order"` // desc (default) or asc
+}
+
+type ProductListResponse struct {
+	Items []ProductResponse `json:"items"`
+	Page  int               `json:"page"`
+	Limit int               `json:"limit"`
+	Total int64             `json:"total"`
 }
 
 
