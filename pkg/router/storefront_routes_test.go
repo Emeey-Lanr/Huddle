@@ -24,6 +24,8 @@ type shop struct {
 	*server
 	key, otherKey             string
 	bag, cap, hidden, foreign string
+	owner, storeId            string // Chioma's admin token and store id
+	otherOwner                string // Tunde's admin token
 }
 
 func newShop(t *testing.T) shop {
@@ -42,7 +44,8 @@ func newShop(t *testing.T) shop {
 	tundeStore, tundeKey := s.createStoreWithKey(tunde, "Tunde Tech")
 	foreign := s.addProduct(tunde, tundeStore, "Phone case", 3000, 5)
 
-	return shop{server: s, key: key, otherKey: tundeKey, bag: bag, cap: cap, hidden: hidden, foreign: foreign}
+	return shop{server: s, key: key, otherKey: tundeKey, bag: bag, cap: cap, hidden: hidden, foreign: foreign,
+		owner: chioma, storeId: storeId, otherOwner: tunde}
 }
 
 func (s shop) get(path, key string) *httptest.ResponseRecorder {

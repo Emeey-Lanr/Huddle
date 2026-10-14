@@ -92,10 +92,12 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
 - [x] **4.4 CORS** — `CORS_ALLOWED_ORIGINS` (comma-separated exact origins or `https://*.huddle.ng` wildcards), credentials allowed, other origins' preflights get 403. Storefronts must use `credentials: "include"`. Cart paths have no trailing slash (`/cart`) because browsers don't follow redirects during CORS.
 - [x] **4.4a Regenerate store key** — `POST /store/:id/key` (owner only) issues a new key and the old one stops working immediately.
 - [ ] **4.4b Store domains in the database** — keeping every seller's custom domain in `CORS_ALLOWED_ORIGINS` won't scale to 200 stores. Store each store's domain(s) and check origins against them (subdomains of the Huddle domain can stay a wildcard).
-- [ ] **4.5 Orders** — `orders` + `order_items` tables, `POST /orders/checkout` (snapshot prices, reserve stock), `GET /orders`, `GET /orders/:id`, order status.
+- [x] **4.5 Orders** — `orders` + `order_items` tables. `POST /storefront/checkout` (guest or signed-in customer; copies prices, holds stock 30 min), `GET /storefront/orders/:id`, `GET /customer/orders`, seller `GET/PATCH /store/:id/orders[/:orderId]`. Unpaid orders expire every minute and their stock goes back on sale.
 - [ ] **4.6 Bachs payments** ([docs.bachs.io](https://docs.bachs.io/introduction)) — create a checkout session per order (success/cancel URLs), mark the order paid only from a signed webhook (`collection.succeeded`), handle `collection.failed` / `checkout.expired`.
   - Sandbox and live are separate: base URL (`sandbox-api.bachs.io` / `api.bachs.io`), API key, webhook secret. Keep them in env vars, sandbox by default.
   - Amounts are decimal strings (e.g. `"15000.00"`), matching how Huddle already stores prices.
+  - Create the Bachs checkout only for a `pending` order, with `expires_at` as its deadline. A payment that arrives after the order expired must not mark it paid: flag it for refund or re-reserve stock.
+  - Mark paid through the same locked status change the seller uses (`order.UpdateOrderStatus` logic), so a webhook and the expiry worker can't both win.
   - Read the official OpenAPI reference (`docs.bachs.io/docs/openapi/openapi.json`) before building; confirm webhook signature scheme, idempotency and refunds.
 - [ ] **4.7 Seller order notifications** — notify the seller on each paid order (email first, WhatsApp later).
 
@@ -105,7 +107,7 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
 
 - [ ] **5.1 Health check** — `GET /healthz` checking Postgres and Redis.
 - [ ] **5.2 Graceful shutdown + server timeouts** — replace `r.Run` with `http.Server`.
-- [ ] **5.3 Config** — port from env, Gin release mode in production. Set `APP_ENV=production` (cart cookie, see 2.6) and `CORS_ALLOWED_ORIGINS` (see 4.4).
+- [ ] **5.3 Config** — port from env, Gin release mode in production. Set `APP_ENV=production` (cart cookie, see 2.6), `CORS_ALLOWED_ORIGINS` (see 4.4) and optionally `ORDER_HOLD_MINUTES` (default 30, see 4.5).
 - [ ] **5.4 Cloudinary client created once** — not per upload (`internal/cloudinary/client.go`).
 - [ ] **5.5 Rate limiter in Redis** — so it works across more than one server.
 - [ ] **5.6 Dockerfile + docker-compose** — API, Postgres, Redis.

@@ -53,3 +53,13 @@ func authenticate(c *gin.Context, role, idKey string) {
 	c.Set("email", claims.Email)
 	c.Next()
 }
+
+// OptionalCustomerAuth lets guests through. When an Authorization header is
+// sent it must be a valid customer token, and "customerId" is set.
+func OptionalCustomerAuth(c *gin.Context) {
+	if c.GetHeader("Authorization") == "" {
+		c.Next()
+		return
+	}
+	authenticate(c, utility.RoleCustomer, "customerId")
+}

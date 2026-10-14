@@ -62,8 +62,8 @@ func toStoreResponse(s model.Stores) model.StoreResponse {
 	}
 }
 
-// ownedStore loads a store by its public id and checks the admin owns it.
-func ownedStore(db *gorm.DB, publicStoreId string, adminId uuid.UUID) (*model.Stores, *utility.AppError) {
+// OwnedStore loads a store by its public id and checks the admin owns it.
+func OwnedStore(db *gorm.DB, publicStoreId string, adminId uuid.UUID) (*model.Stores, *utility.AppError) {
 	var store model.Stores
 	if err := db.Where("store_id = ?", publicStoreId).First(&store).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -91,7 +91,7 @@ func ListStores(db *gorm.DB, adminId uuid.UUID) ([]model.StoreResponse, *utility
 }
 
 func GetStore(db *gorm.DB, publicStoreId string, adminId uuid.UUID) (*model.StoreResponse, *utility.AppError) {
-	store, appErr := ownedStore(db, publicStoreId, adminId)
+	store, appErr := OwnedStore(db, publicStoreId, adminId)
 	if appErr != nil {
 		return nil, appErr
 	}
@@ -100,7 +100,7 @@ func GetStore(db *gorm.DB, publicStoreId string, adminId uuid.UUID) (*model.Stor
 }
 
 func UpdateStore(db *gorm.DB, publicStoreId string, adminId uuid.UUID, req model.StoreUpdate) (*model.StoreResponse, *utility.AppError) {
-	store, appErr := ownedStore(db, publicStoreId, adminId)
+	store, appErr := OwnedStore(db, publicStoreId, adminId)
 	if appErr != nil {
 		return nil, appErr
 	}
@@ -129,7 +129,7 @@ func UpdateStore(db *gorm.DB, publicStoreId string, adminId uuid.UUID, req model
 // RegenerateStoreKey issues a new publishable store key and invalidates the
 // old one immediately. Only the hash is stored; the key is returned once.
 func RegenerateStoreKey(db *gorm.DB, publicStoreId string, adminId uuid.UUID) (string, *utility.AppError) {
-	store, appErr := ownedStore(db, publicStoreId, adminId)
+	store, appErr := OwnedStore(db, publicStoreId, adminId)
 	if appErr != nil {
 		return "", appErr
 	}

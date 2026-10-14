@@ -73,6 +73,14 @@ func validationMessage(e validator.FieldError) string {
 		return fmt.Sprintf("%s must be less than %s%s", field, param, unit)
 	case "len":
 		return fmt.Sprintf("%s must be exactly %s%s", field, param, unit)
+	case "oneof":
+		return fmt.Sprintf("%s must be one of: %s", field, strings.ReplaceAll(param, " ", ", "))
+	case "required_if":
+		// param is "OtherField value"
+		if parts := strings.Fields(param); len(parts) == 2 {
+			return fmt.Sprintf("%s is required for %s", field, parts[1])
+		}
+		return fmt.Sprintf("%s is required", field)
 	default:
 		return fmt.Sprintf("%s is invalid (%s)", field, e.Tag())
 	}

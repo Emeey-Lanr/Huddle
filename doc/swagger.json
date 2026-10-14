@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Huddle Multi-Tenant E-Commerce API",
-    "description": "API for the Huddle multi-tenant e-commerce backend.\n\n**Auth.** Tokens are JWTs that last 1 hour and carry a role. Admin routes need an **admin** token (from `/admin/signup` or `/admin/signin`). `/customer/profile` needs a **customer** token (from `/customer/signup` or `/customer/signin`). Using the wrong role returns 403.\n\n**Responses.** Every response uses the same envelope: `{ success, message, data?, error? }`.\n\n**Money.** Prices are returned as decimal strings, e.g. `\"15000\"` or `\"1500.50\"`. Requests accept a number or a string.\n\n**Rate limit.** Sign-up and sign-in routes allow 60 requests per minute per IP, then return 429.\n\n**Storefronts.** Storefront websites call `/storefront/*` and `/cart` with the store's key in the `X-Store-Key` header. The key is **publishable** (it is visible in storefront pages): it only identifies the store for public actions and never grants seller access.\n\n**CORS.** Browser origins listed in `CORS_ALLOWED_ORIGINS` (exact origins or wildcards like `https://*.huddle.ng`) may call the API with credentials; storefronts must send requests with `credentials: \"include\"` so the cart cookie is kept.",
-    "version": "1.4.0"
+    "description": "API for the Huddle multi-tenant e-commerce backend.\n\n**Auth.** Tokens are JWTs that last 1 hour and carry a role. Admin routes need an **admin** token (from `/admin/signup` or `/admin/signin`). `/customer/profile` and `/customer/orders` need a **customer** token (from `/customer/signup` or `/customer/signin`). Using the wrong role returns 403.\n\n**Responses.** Every response uses the same envelope: `{ success, message, data?, error? }`.\n\n**Money.** Prices are returned as decimal strings, e.g. `\"15000\"` or `\"1500.50\"`. Requests accept a number or a string.\n\n**Rate limit.** Sign-up and sign-in routes allow 60 requests per minute per IP, then return 429.\n\n**Storefronts.** Storefront websites call `/storefront/*` and `/cart` with the store's key in the `X-Store-Key` header. The key is **publishable** (it is visible in storefront pages): it only identifies the store for public actions and never grants seller access.\n\n**CORS.** Browser origins listed in `CORS_ALLOWED_ORIGINS` (exact origins or wildcards like `https://*.huddle.ng`) may call the API with credentials; storefronts must send requests with `credentials: \"include\"` so the cart cookie is kept.",
+    "version": "1.5.0"
   },
   "servers": [
     {
@@ -35,6 +35,10 @@
     {
       "name": "Cart",
       "description": "Shopping cart for storefronts (X-Store-Key); one cart per store per session"
+    },
+    {
+      "name": "Orders",
+      "description": "Checkout, the shopper's orders, and the seller's order management"
     }
   ],
   "components": {
@@ -93,6 +97,16 @@
         "schema": {
           "type": "string",
           "example": "str-2eb6c9490f2042139a1c5e7d8b6f4a21"
+        }
+      },
+      "OrderIdPath": {
+        "name": "orderId",
+        "in": "path",
+        "required": true,
+        "description": "Public order id",
+        "schema": {
+          "type": "string",
+          "example": "ord_8c1f0e2d9b7a4c6e8f1a2b3c4d5e6f70"
         }
       }
     },
@@ -308,6 +322,200 @@
           "store_description": {
             "type": "string",
             "example": "Handmade ankara bags and accessories"
+          }
+        }
+      },
+      "OrderItem": {
+        "type": "object",
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "example": "prod_2eb6c9490f2042139a1c5e7d8b6f4a21"
+          },
+          "product_name": {
+            "type": "string",
+            "example": "Ankara bag"
+          },
+          "unit_price": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "quantity": {
+            "type": "integer",
+            "example": 2
+          },
+          "line_total": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              }
+            ],
+            "example": "30000"
+          }
+        }
+      },
+      "Order": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "ord_8c1f0e2d9b7a4c6e8f1a2b3c4d5e6f70",
+            "description": "Random, hard-to-guess id; works as the shopper's receipt link"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "paid",
+              "fulfilled",
+              "cancelled",
+              "expired"
+            ],
+            "example": "pending"
+          },
+          "currency": {
+            "type": "string",
+            "example": "NGN"
+          },
+          "total": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              }
+            ],
+            "example": "30000"
+          },
+          "name": {
+            "type": "string",
+            "example": "Mama Nkechi"
+          },
+          "phone": {
+            "type": "string",
+            "example": "+2348031234567",
+            "description": "Spaces, dashes and brackets removed"
+          },
+          "email": {
+            "type": "string",
+            "example": ""
+          },
+          "delivery_method": {
+            "type": "string",
+            "enum": [
+              "delivery",
+              "pickup"
+            ]
+          },
+          "address": {
+            "type": "string",
+            "example": "12 Balogun Market Road"
+          },
+          "city": {
+            "type": "string",
+            "example": "Lagos Island"
+          },
+          "state": {
+            "type": "string",
+            "example": "Lagos"
+          },
+          "note": {
+            "type": "string",
+            "example": "Call when you reach the gate"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrderItem"
+            }
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "A pending order holds its stock until this time, then expires and the stock goes back on sale"
+          },
+          "paid_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "OrderList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Order"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "example": 1
+          },
+          "limit": {
+            "type": "integer",
+            "example": 20
+          },
+          "total": {
+            "type": "integer",
+            "example": 1
+          }
+        }
+      },
+      "CheckoutRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "phone",
+          "delivery_method"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 250,
+            "example": "Mama Nkechi"
+          },
+          "phone": {
+            "type": "string",
+            "example": "0803 123 4567",
+            "description": "7 to 15 digits, optional leading +; spaces, dashes and brackets are allowed"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "Optional. Defaults to the account email when a customer token is sent"
+          },
+          "delivery_method": {
+            "type": "string",
+            "enum": [
+              "delivery",
+              "pickup"
+            ]
+          },
+          "address": {
+            "type": "string",
+            "description": "Required for delivery"
+          },
+          "city": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Required for delivery"
+          },
+          "state": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Required for delivery"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 1000
           }
         }
       }
@@ -2141,6 +2349,466 @@
           },
           "404": {
             "description": "Product not found, hidden, or in another store",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/storefront/checkout": {
+      "post": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "Place an order from the cart",
+        "description": "Turns this store's cart (from the `cart_session` cookie) into a **pending** order. Prices are read from the products at this moment, stock is held for 30 minutes (`ORDER_HOLD_MINUTES`), and the cart is emptied. If the order is not paid in time it expires and the stock goes back on sale.\n\n**Guests can check out.** If a customer token is sent, the order is linked to that account; a token that is invalid (401), not a customer token (403) or from another store (403) is refused, never ignored.\n\nIf any item is short of stock the whole order is refused and nothing is taken.",
+        "security": [
+          {
+            "StoreKey": [],
+            "CartSession": []
+          },
+          {
+            "StoreKey": [],
+            "CartSession": [],
+            "CustomerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckoutRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Order placed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Order placed successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Order"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed, invalid phone, empty cart, or items in different currencies",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidStoreKey"
+          },
+          "403": {
+            "description": "Token is not a customer token of this store",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "An item is sold out, has too little stock (e.g. \"Only 1 of Shoe left in stock\") or is no longer available; or a checkout of this cart is already running",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/storefront/orders/{id}": {
+      "get": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "View an order placed in this store",
+        "description": "For the shopper's order page or receipt link. Orders of other stores return 404.",
+        "security": [
+          {
+            "StoreKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Public order id",
+            "schema": {
+              "type": "string",
+              "example": "ord_8c1f0e2d9b7a4c6e8f1a2b3c4d5e6f70"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Order retrieved successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Order"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidStoreKey"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/customer/orders": {
+      "get": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "List the signed-in customer's orders",
+        "description": "Newest first. Guest orders are not included.",
+        "security": [
+          {
+            "CustomerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "paid",
+                "fulfilled",
+                "cancelled",
+                "expired"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Orders retrieved successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/OrderList"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/store/{id}/orders": {
+      "get": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "List a store's orders (owner only)",
+        "description": "Newest first, optionally filtered by status.",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StoreIdPath"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "paid",
+                "fulfilled",
+                "cancelled",
+                "expired"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Orders retrieved successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/OrderList"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/store/{id}/orders/{orderId}": {
+      "get": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "Get one order (owner only)",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StoreIdPath"
+          },
+          {
+            "$ref": "#/components/parameters/OrderIdPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Order retrieved successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Order"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "Change an order's status (owner only)",
+        "description": "Allowed changes:\n- `pending` → `paid` (the seller confirmed a transfer or cash payment)\n- `pending` → `cancelled` (the held stock goes back on sale)\n- `paid` → `fulfilled`\n\nAnything else returns 409. `expired` is set only by the system.",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StoreIdPath"
+          },
+          {
+            "$ref": "#/components/parameters/OrderIdPath"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "status"
+                ],
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "paid",
+                      "fulfilled",
+                      "cancelled"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Order updated successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Order"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Status change not allowed, e.g. \"A cancelled order cannot be marked paid\"",
             "content": {
               "application/json": {
                 "schema": {

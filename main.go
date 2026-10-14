@@ -1,11 +1,15 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
+	"time"
+
 	"huddle/db/connection"
 	"huddle/pkg/audit"
 	"huddle/pkg/router"
+	"huddle/pkg/services/order"
 
 	"github.com/joho/godotenv"
 )
@@ -23,6 +27,9 @@ func main() {
 
 	db := connection.ConnectToDb()
 	rdb := connection.ConnectToRedis()
+
+	// Releases stock held by unpaid orders once their hold time passes.
+	order.StartExpiryWorker(context.Background(), db, time.Minute)
 
 	r := router.RoutesSetup(db, rdb)
 

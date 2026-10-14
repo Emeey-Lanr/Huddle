@@ -11,11 +11,13 @@ import (
 
 func CustomerRoutes(r *gin.Engine, db *gorm.DB, rdb *redis.Client) {
 	customerBase := &controller.CustomerBase{DB: db, Redis: rdb}
+	orders := &controller.OrderController{Db: db, Redis: rdb}
 	customerGroup := r.Group("/customer")
 
 	{
 		customerGroup.POST("/signup", middleware.RateLimiter, customerBase.Signup)
 		customerGroup.POST("/signin", middleware.RateLimiter, customerBase.Signin)
 		customerGroup.GET("/profile", middleware.CustomerAuthMiddleware, customerBase.GetProfile)
+		customerGroup.GET("/orders", middleware.CustomerAuthMiddleware, orders.CustomerOrders)
 	}
 }
