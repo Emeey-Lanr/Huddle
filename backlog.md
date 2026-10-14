@@ -77,8 +77,8 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
 - [ ] **3.3 Controller/route tests**
   HTTP-level tests for each route: auth required, wrong owner → 403, bad payload → 400.
 
-- [ ] **3.4 Keep Swagger in sync**
-  `doc/swagger.json` is missing `/cart/items/{id}`, and `POST /cart` now takes only `product_id` + `quantity`. All `/cart` routes need an `X-Store-Id` header. `GET /product/products` returns `{items, page, limit, total}`. Customer profile needs a customer token. Regenerate with `swag init` on each change (or check in CI).
+- [x] **3.4 Keep Swagger in sync**
+  `doc/swagger.json` is hand-written OpenAPI 3.0 (not generated), served at `/swagger/index.html`. Rewritten to match the code in Oct 2026. `pkg/router/swagger_test.go` fails if a route is added or removed without updating it, so update the file with every API change.
 
 ---
 

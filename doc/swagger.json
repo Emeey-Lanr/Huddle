@@ -2,22 +2,36 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Huddle Multi-Tenant E-Commerce API",
-    "description": "API documentation for the Huddle multi-tenant e-commerce backend platform.",
-    "version": "1.0.0"
+    "description": "API for the Huddle multi-tenant e-commerce backend.\n\n**Auth.** Tokens are JWTs that last 1 hour and carry a role. Admin routes need an **admin** token (from `/admin/signup` or `/admin/signin`). `/customer/profile` needs a **customer** token (from `/customer/signup` or `/customer/signin`). Using the wrong role returns 403.\n\n**Responses.** Every response uses the same envelope: `{ success, message, data?, error? }`.\n\n**Money.** Prices are returned as decimal strings, e.g. `\"15000\"` or `\"1500.50\"`. Requests accept a number or a string.\n\n**Rate limit.** Sign-up and sign-in routes allow 60 requests per minute per IP, then return 429.",
+    "version": "1.1.0"
   },
+  "servers": [{ "url": "http://localhost:8080", "description": "Local" }],
   "tags": [
-    { "name": "Admin Auth", "description": "Platform administrator authentication" },
-    { "name": "Store", "description": "Tenant store management" },
-    { "name": "Products", "description": "Product catalog and media management" },
-    { "name": "Customer", "description": "Customer authentication and profile" },
-    { "name": "Cart", "description": "Shopping cart session operations" }
+    { "name": "Admin Auth", "description": "Store owner (admin) accounts" },
+    { "name": "Store", "description": "Store management" },
+    { "name": "Products", "description": "Product catalog and images (admin only, own stores)" },
+    { "name": "Customer", "description": "Shopper accounts within a store" },
+    { "name": "Cart", "description": "Shopping cart, one per store per session" }
   ],
   "components": {
     "securitySchemes": {
-      "BearerAuth": {
+      "AdminAuth": {
         "type": "http",
         "scheme": "bearer",
-        "bearerFormat": "JWT"
+        "bearerFormat": "JWT",
+        "description": "Admin token from /admin/signup or /admin/signin"
+      },
+      "CustomerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Customer token from /customer/signup or /customer/signin"
+      },
+      "CartSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "cart_session",
+        "description": "Set by POST /cart/ (HttpOnly, 7 days). Holds one cart per store."
       }
     },
     "parameters": {
@@ -25,9 +39,133 @@
         "name": "X-Store-Id",
         "in": "header",
         "required": true,
-        "description": "Public store identifier",
-        "schema": {
-          "type": "string"
+        "description": "Public store id returned by POST /store/create",
+        "schema": { "type": "string", "example": "str-2eb6c9490f2042139a1c5e7d8b6f4a21" }
+      },
+      "ProductIdPath": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "Public product id",
+        "schema": { "type": "string", "example": "prod_2eb6c9490f2042139a1c5e7d8b6f4a21" }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "example": false },
+          "message": { "type": "string", "example": "Product not found" },
+          "error": { "type": "string", "example": "record not found" }
+        }
+      },
+      "Money": {
+        "type": "string",
+        "description": "Decimal amount as a string",
+        "example": "15000"
+      },
+      "TokenData": {
+        "type": "object",
+        "properties": {
+          "token": { "type": "string", "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." }
+        }
+      },
+      "Product": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "example": "prod_2eb6c9490f2042139a1c5e7d8b6f4a21" },
+          "name": { "type": "string", "example": "Ankara bag" },
+          "description": { "type": "string", "example": "Handmade ankara tote bag" },
+          "price": { "$ref": "#/components/schemas/Money" },
+          "currency": { "type": "string", "example": "NGN" },
+          "stock_quantity": { "type": "integer", "example": 10 },
+          "active": { "type": "boolean", "example": true },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ProductList": {
+        "type": "object",
+        "properties": {
+          "items": { "type": "array", "items": { "$ref": "#/components/schemas/Product" } },
+          "page": { "type": "integer", "example": 1 },
+          "limit": { "type": "integer", "example": 20 },
+          "total": { "type": "integer", "example": 25, "description": "Number of products matching the filters, across all pages" }
+        }
+      },
+      "Customer": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string", "example": "Ada Obi" },
+          "email": { "type": "string", "format": "email", "example": "ada@example.com" },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CustomerAuthData": {
+        "type": "object",
+        "properties": {
+          "token": { "type": "string", "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." },
+          "customer": { "$ref": "#/components/schemas/Customer" }
+        }
+      },
+      "CartItem": {
+        "type": "object",
+        "properties": {
+          "product_id": { "type": "string", "example": "prod_2eb6c9490f2042139a1c5e7d8b6f4a21" },
+          "product_name": { "type": "string", "example": "Ankara bag" },
+          "product_price": { "$ref": "#/components/schemas/Money" },
+          "currency": { "type": "string", "example": "NGN" },
+          "quantity": { "type": "integer", "example": 2 }
+        }
+      },
+      "Cart": {
+        "type": "object",
+        "properties": {
+          "session_id": { "type": "string", "example": "cart_5f0c2b1e9a7d4c3b8e6f1a2d3c4b5a69" },
+          "store_id": { "type": "string", "example": "str-2eb6c9490f2042139a1c5e7d8b6f4a21" },
+          "items": { "type": "array", "items": { "$ref": "#/components/schemas/CartItem" } }
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Invalid request body, query or values",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "Unauthorized": {
+        "description": "Missing or invalid token, or missing X-Store-Id header",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "Forbidden": {
+        "description": "Wrong token role, or the store/product belongs to another admin",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "NotFound": {
+        "description": "Store or product not found",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "Conflict": {
+        "description": "Already exists, or not enough stock",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "TooManyRequests": {
+        "description": "Rate limit exceeded (60 requests per minute per IP)",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "CartOk": {
+        "description": "Current cart for this store",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean", "example": true },
+                "message": { "type": "string", "example": "Cart retrieved successfully" },
+                "data": { "$ref": "#/components/schemas/Cart" }
+              }
+            }
+          }
         }
       }
     }
@@ -36,7 +174,7 @@
     "/admin/signup": {
       "post": {
         "tags": ["Admin Auth"],
-        "summary": "Register platform administrator",
+        "summary": "Register a store owner (admin)",
         "requestBody": {
           "required": true,
           "content": {
@@ -45,9 +183,9 @@
                 "type": "object",
                 "required": ["name", "username", "email", "password"],
                 "properties": {
-                  "name": { "type": "string", "example": "John Doe" },
-                  "username": { "type": "string", "example": "adminjohn" },
-                  "email": { "type": "string", "format": "email", "example": "admin@example.com" },
+                  "name": { "type": "string", "example": "Chioma Eze" },
+                  "username": { "type": "string", "example": "chiomaeze" },
+                  "email": { "type": "string", "format": "email", "example": "chioma@example.com" },
                   "password": { "type": "string", "minLength": 6, "example": "secret123" }
                 }
               }
@@ -56,25 +194,23 @@
         },
         "responses": {
           "201": {
-            "description": "Admin registered successfully",
+            "description": "Admin registered; returns an admin token",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
                     "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Registration Succesfull" },
-                    "data": {
-                      "type": "object",
-                      "properties": {
-                        "token": { "type": "string", "example": "eyJhbGciOiJIUzI1Ni..." }
-                      }
-                    }
+                    "message": { "type": "string", "example": "Registration Successful" },
+                    "data": { "$ref": "#/components/schemas/TokenData" }
                   }
                 }
               }
             }
-          }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" }
         }
       }
     },
@@ -82,7 +218,7 @@
     "/admin/signin": {
       "post": {
         "tags": ["Admin Auth"],
-        "summary": "Authenticate administrator",
+        "summary": "Sign in a store owner (admin)",
         "requestBody": {
           "required": true,
           "content": {
@@ -91,7 +227,7 @@
                 "type": "object",
                 "required": ["username", "password"],
                 "properties": {
-                  "username": { "type": "string", "example": "adminjohn" },
+                  "username": { "type": "string", "example": "chiomaeze" },
                   "password": { "type": "string", "example": "secret123" }
                 }
               }
@@ -100,25 +236,23 @@
         },
         "responses": {
           "200": {
-            "description": "Login successful",
+            "description": "Signed in; returns an admin token",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
                     "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Login Succesfull" },
-                    "data": {
-                      "type": "object",
-                      "properties": {
-                        "token": { "type": "string", "example": "eyJhbGciOiJIUzI1Ni..." }
-                      }
-                    }
+                    "message": { "type": "string", "example": "Login Successful" },
+                    "data": { "$ref": "#/components/schemas/TokenData" }
                   }
                 }
               }
             }
-          }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "description": "Invalid credentials", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "429": { "$ref": "#/components/responses/TooManyRequests" }
         }
       }
     },
@@ -126,8 +260,9 @@
     "/store/create": {
       "post": {
         "tags": ["Store"],
-        "summary": "Create a new tenant store",
-        "security": [{ "BearerAuth": [] }],
+        "summary": "Create a store",
+        "description": "The `api_key` is shown **only once** in this response; only a hash is stored.",
+        "security": [{ "AdminAuth": [] }],
         "requestBody": {
           "required": true,
           "content": {
@@ -136,8 +271,8 @@
                 "type": "object",
                 "required": ["store_name", "store_description"],
                 "properties": {
-                  "store_name": { "type": "string", "example": "Fashion Hub" },
-                  "store_description": { "type": "string", "example": "Top quality clothing and modern footwear" }
+                  "store_name": { "type": "string", "example": "Chioma's Bags" },
+                  "store_description": { "type": "string", "minLength": 10, "example": "Handmade ankara bags and accessories" }
                 }
               }
             }
@@ -145,20 +280,20 @@
         },
         "responses": {
           "201": {
-            "description": "Store created successfully",
+            "description": "Store created",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
                     "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Store Created Succesfully" },
+                    "message": { "type": "string", "example": "Store Created Successfully" },
                     "data": {
                       "type": "object",
                       "properties": {
-                        "store_name": { "type": "string", "example": "Fashion Hub" },
-                        "store_id": { "type": "string", "example": "str-2eb6c949-0f20-4213" },
-                        "api_key": { "type": "string", "example": "a1b2c3d4..." },
+                        "store_name": { "type": "string", "example": "Chioma's Bags" },
+                        "store_id": { "type": "string", "example": "str-2eb6c9490f2042139a1c5e7d8b6f4a21" },
+                        "api_key": { "type": "string", "example": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08" },
                         "created_at": { "type": "string", "format": "date-time" }
                       }
                     }
@@ -166,7 +301,11 @@
                 }
               }
             }
-          }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "description": "You already have a store with this name", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
         }
       }
     },
@@ -174,11 +313,9 @@
     "/product/": {
       "post": {
         "tags": ["Products"],
-        "summary": "Create a product",
-        "security": [{ "BearerAuth": [] }],
-        "parameters": [
-          { "$ref": "#/components/parameters/XStoreIdHeader" }
-        ],
+        "summary": "Create a product in one of your stores",
+        "security": [{ "AdminAuth": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/XStoreIdHeader" }],
         "requestBody": {
           "required": true,
           "content": {
@@ -187,10 +324,10 @@
                 "type": "object",
                 "required": ["name", "description", "price", "currency"],
                 "properties": {
-                  "name": { "type": "string", "example": "Leather Sofa" },
-                  "description": { "type": "string", "example": "Premium handcrafted leather sofa" },
-                  "price": { "type": "number", "example": 1500.00 },
-                  "currency": { "type": "string", "example": "USD" },
+                  "name": { "type": "string", "example": "Ankara bag" },
+                  "description": { "type": "string", "minLength": 10, "example": "Handmade ankara tote bag" },
+                  "price": { "type": "number", "example": 15000 },
+                  "currency": { "type": "string", "example": "NGN" },
                   "stock_quantity": { "type": "integer", "example": 10 }
                 }
               }
@@ -199,25 +336,30 @@
         },
         "responses": {
           "201": {
-            "description": "Product created successfully",
+            "description": "Product created",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
                     "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Product Added Succesfully" },
+                    "message": { "type": "string", "example": "Product Added Successfully" },
                     "data": {
                       "type": "object",
                       "properties": {
-                        "id": { "type": "string", "example": "prod_2eb6c9490f204213" }
+                        "id": { "type": "string", "example": "prod_2eb6c9490f2042139a1c5e7d8b6f4a21" }
                       }
                     }
                   }
                 }
               }
             }
-          }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "description": "A product with this name already exists in the store", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
         }
       }
     },
@@ -225,43 +367,39 @@
     "/product/products": {
       "get": {
         "tags": ["Products"],
-        "summary": "List products for a store",
-        "security": [{ "BearerAuth": [] }],
+        "summary": "List products in one of your stores",
+        "description": "Paginated, newest first by default. Includes hidden (inactive) products unless `active` is set.",
+        "security": [{ "AdminAuth": [] }],
         "parameters": [
-          { "name": "store_id", "in": "query", "required": true, "schema": { "type": "string" } },
-          { "name": "min_price", "in": "query", "required": false, "schema": { "type": "integer" } },
-          { "name": "max_price", "in": "query", "required": false, "schema": { "type": "integer" } }
+          { "name": "store_id", "in": "query", "required": true, "description": "Public store id", "schema": { "type": "string" } },
+          { "name": "page", "in": "query", "schema": { "type": "integer", "minimum": 1, "default": 1 } },
+          { "name": "limit", "in": "query", "description": "Values above 100 are capped at 100", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } },
+          { "name": "min_price", "in": "query", "schema": { "type": "number", "minimum": 0 } },
+          { "name": "max_price", "in": "query", "description": "Must not be lower than min_price", "schema": { "type": "number", "minimum": 0 } },
+          { "name": "active", "in": "query", "description": "true = visible products only, false = hidden only", "schema": { "type": "boolean" } },
+          { "name": "sort", "in": "query", "schema": { "type": "string", "enum": ["created_at", "price", "name"], "default": "created_at" } },
+          { "name": "order", "in": "query", "schema": { "type": "string", "enum": ["desc", "asc"], "default": "desc" } }
         ],
         "responses": {
           "200": {
-            "description": "Products fetched successfully",
+            "description": "One page of products",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
                     "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Data gotten succesfully" },
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": { "type": "string" },
-                          "name": { "type": "string" },
-                          "description": { "type": "string" },
-                          "price": { "type": "number" },
-                          "currency": { "type": "string" },
-                          "stock_quantity": { "type": "integer" },
-                          "active": { "type": "boolean" }
-                        }
-                      }
-                    }
+                    "message": { "type": "string", "example": "Products retrieved successfully" },
+                    "data": { "$ref": "#/components/schemas/ProductList" }
                   }
                 }
               }
             }
-          }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
         }
       }
     },
@@ -269,11 +407,9 @@
     "/product/{id}": {
       "get": {
         "tags": ["Products"],
-        "summary": "Get a product by public ID",
-        "security": [{ "BearerAuth": [] }],
-        "parameters": [
-          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
-        ],
+        "summary": "Get one of your products with its images",
+        "security": [{ "AdminAuth": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/ProductIdPath" }],
         "responses": {
           "200": {
             "description": "Product found",
@@ -287,24 +423,35 @@
                     "data": {
                       "type": "object",
                       "properties": {
-                        "product": { "type": "object" },
-                        "images": { "type": "array", "items": { "type": "object" } }
+                        "product": { "$ref": "#/components/schemas/Product" },
+                        "images": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": { "type": "string", "description": "Cloudinary image id", "example": "img_7c1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a" },
+                              "img_url": { "type": "string", "format": "uri" }
+                            }
+                          }
+                        }
                       }
                     }
                   }
                 }
               }
             }
-          }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
         }
       },
       "put": {
         "tags": ["Products"],
-        "summary": "Update product details",
-        "security": [{ "BearerAuth": [] }],
-        "parameters": [
-          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
-        ],
+        "summary": "Update one of your products",
+        "description": "Send only the fields to change; fields left out are not changed. `stock_quantity: 0` sets stock to zero.",
+        "security": [{ "AdminAuth": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/ProductIdPath" }],
         "requestBody": {
           "required": true,
           "content": {
@@ -314,10 +461,10 @@
                 "properties": {
                   "name": { "type": "string" },
                   "description": { "type": "string" },
-                  "price": { "type": "number" },
+                  "price": { "type": "number", "minimum": 0, "example": 18000 },
                   "currency": { "type": "string" },
-                  "stock_quantity": { "type": "integer" },
-                  "active": { "type": "boolean" }
+                  "stock_quantity": { "type": "integer", "minimum": 0 },
+                  "active": { "type": "boolean", "description": "false hides the product from shoppers" }
                 }
               }
             }
@@ -325,21 +472,36 @@
         },
         "responses": {
           "200": {
-            "description": "Product updated successfully"
-          }
+            "description": "Updated product",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string", "example": "Product updated successfully" },
+                    "data": { "$ref": "#/components/schemas/Product" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
         }
       },
       "delete": {
         "tags": ["Products"],
-        "summary": "Delete a product",
-        "security": [{ "BearerAuth": [] }],
-        "parameters": [
-          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
-        ],
+        "summary": "Delete one of your products and its images",
+        "security": [{ "AdminAuth": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/ProductIdPath" }],
         "responses": {
-          "200": {
-            "description": "Product deleted successfully"
-          }
+          "200": { "description": "Product deleted" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
         }
       }
     },
@@ -347,20 +509,22 @@
     "/product/{id}/images": {
       "post": {
         "tags": ["Products"],
-        "summary": "Upload images for a product (1-5 files, <=5MB each)",
-        "security": [{ "BearerAuth": [] }],
-        "parameters": [
-          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
-        ],
+        "summary": "Upload images for one of your products",
+        "description": "1 to 5 files, each at most 5MB. JPEG, PNG, GIF or WebP.",
+        "security": [{ "AdminAuth": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/ProductIdPath" }],
         "requestBody": {
           "required": true,
           "content": {
             "multipart/form-data": {
               "schema": {
                 "type": "object",
+                "required": ["image"],
                 "properties": {
                   "image": {
                     "type": "array",
+                    "minItems": 1,
+                    "maxItems": 5,
                     "items": { "type": "string", "format": "binary" }
                   }
                 }
@@ -370,8 +534,40 @@
         },
         "responses": {
           "201": {
-            "description": "Images successfully uploaded"
-          }
+            "description": "Images uploaded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string", "example": "Images uploaded successfully" },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "product_id": { "type": "string" },
+                        "images": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "image_id": { "type": "string" },
+                              "image_url": { "type": "string", "format": "uri" }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "description": "Upload or save failed; uploaded files are removed from Cloudinary", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
         }
       }
     },
@@ -379,7 +575,7 @@
     "/customer/signup": {
       "post": {
         "tags": ["Customer"],
-        "summary": "Register a customer under a tenant store",
+        "summary": "Register a shopper in a store",
         "requestBody": {
           "required": true,
           "content": {
@@ -388,10 +584,10 @@
                 "type": "object",
                 "required": ["store_id", "name", "email", "password"],
                 "properties": {
-                  "store_id": { "type": "string" },
-                  "name": { "type": "string" },
-                  "email": { "type": "string", "format": "email" },
-                  "password": { "type": "string", "minLength": 6 }
+                  "store_id": { "type": "string", "example": "str-2eb6c9490f2042139a1c5e7d8b6f4a21" },
+                  "name": { "type": "string", "example": "Ada Obi" },
+                  "email": { "type": "string", "format": "email", "example": "ada@example.com" },
+                  "password": { "type": "string", "minLength": 6, "example": "secret123" }
                 }
               }
             }
@@ -399,8 +595,24 @@
         },
         "responses": {
           "201": {
-            "description": "Customer registered successfully"
-          }
+            "description": "Customer registered; returns a customer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string", "example": "Customer registered successfully" },
+                    "data": { "$ref": "#/components/schemas/CustomerAuthData" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "description": "Email already registered in this store", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "429": { "$ref": "#/components/responses/TooManyRequests" }
         }
       }
     },
@@ -408,7 +620,7 @@
     "/customer/signin": {
       "post": {
         "tags": ["Customer"],
-        "summary": "Authenticate customer",
+        "summary": "Sign in a shopper",
         "requestBody": {
           "required": true,
           "content": {
@@ -417,9 +629,9 @@
                 "type": "object",
                 "required": ["store_id", "email", "password"],
                 "properties": {
-                  "store_id": { "type": "string" },
-                  "email": { "type": "string", "format": "email" },
-                  "password": { "type": "string" }
+                  "store_id": { "type": "string", "example": "str-2eb6c9490f2042139a1c5e7d8b6f4a21" },
+                  "email": { "type": "string", "format": "email", "example": "ada@example.com" },
+                  "password": { "type": "string", "example": "secret123" }
                 }
               }
             }
@@ -427,8 +639,24 @@
         },
         "responses": {
           "200": {
-            "description": "Login successful"
-          }
+            "description": "Signed in; returns a customer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string", "example": "Login successful" },
+                    "data": { "$ref": "#/components/schemas/CustomerAuthData" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "description": "Invalid credentials", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" }
         }
       }
     },
@@ -436,42 +664,128 @@
     "/customer/profile": {
       "get": {
         "tags": ["Customer"],
-        "summary": "Get authenticated customer profile",
-        "security": [{ "BearerAuth": [] }],
+        "summary": "Get the signed-in shopper's profile",
+        "security": [{ "CustomerAuth": [] }],
         "responses": {
           "200": {
-            "description": "Profile fetched successfully"
-          }
+            "description": "Profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string", "example": "Profile fetched successfully" },
+                    "data": { "$ref": "#/components/schemas/Customer" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "description": "Token is not a customer token", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "description": "Customer not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
         }
       }
     },
 
-    "/cart": {
+    "/cart/": {
       "post": {
         "tags": ["Cart"],
-        "summary": "Add item to shopping cart",
+        "summary": "Add a product to this store's cart",
+        "description": "Name, price and currency always come from the database. Adding a product already in the cart increases its quantity. Sets the `cart_session` cookie if missing.",
+        "security": [{}, { "CartSession": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/XStoreIdHeader" }],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["product_id", "product_name", "product_price", "currency", "quantity"],
+                "required": ["product_id", "quantity"],
                 "properties": {
-                  "product_id": { "type": "string" },
-                  "product_name": { "type": "string" },
-                  "product_price": { "type": "number" },
-                  "currency": { "type": "string" },
-                  "quantity": { "type": "integer", "minimum": 1 }
+                  "product_id": { "type": "string", "example": "prod_2eb6c9490f2042139a1c5e7d8b6f4a21" },
+                  "quantity": { "type": "integer", "minimum": 1, "example": 2 }
                 }
               }
             }
           }
         },
         "responses": {
-          "200": {
-            "description": "Item added to cart successfully"
+          "200": { "$ref": "#/components/responses/CartOk" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "description": "Store not found, or product not found / hidden in this store", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "409": { "description": "Not enough stock, e.g. \"Only 3 of Fila cap left in stock\"", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      },
+      "get": {
+        "tags": ["Cart"],
+        "summary": "Get this store's cart",
+        "description": "Returns an empty cart when there is no session yet.",
+        "security": [{}, { "CartSession": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/XStoreIdHeader" }],
+        "responses": {
+          "200": { "$ref": "#/components/responses/CartOk" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "delete": {
+        "tags": ["Cart"],
+        "summary": "Empty this store's cart",
+        "description": "Carts for other stores in the same session are kept.",
+        "security": [{}, { "CartSession": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/XStoreIdHeader" }],
+        "responses": {
+          "200": { "description": "Cart cleared" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+
+    "/cart/items/{id}": {
+      "put": {
+        "tags": ["Cart"],
+        "summary": "Set the quantity of a product in this store's cart",
+        "security": [{ "CartSession": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/XStoreIdHeader" },
+          { "$ref": "#/components/parameters/ProductIdPath" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["quantity"],
+                "properties": {
+                  "quantity": { "type": "integer", "minimum": 1, "example": 3 }
+                }
+              }
+            }
           }
+        },
+        "responses": {
+          "200": { "$ref": "#/components/responses/CartOk" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "description": "No cart session, product not in this store, or product not in the cart", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "409": { "description": "Not enough stock", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      },
+      "delete": {
+        "tags": ["Cart"],
+        "summary": "Remove a product from this store's cart",
+        "security": [{ "CartSession": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/XStoreIdHeader" },
+          { "$ref": "#/components/parameters/ProductIdPath" }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/CartOk" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "description": "No cart session, or product not in the cart", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
         }
       }
     }
