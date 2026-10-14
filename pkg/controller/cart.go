@@ -6,11 +6,28 @@ import (
 	"huddle/pkg/services/cart"
 	"huddle/pkg/utility"
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
+
+const cartCookieMaxAge = 7 * 24 * 3600
+
+// setCartCookie sets the HttpOnly cart_session cookie. In production
+// (APP_ENV=production) it is Secure with SameSite=None so storefronts on other
+// domains can send it; elsewhere it uses SameSite=Lax so it works over
+// http://localhost.
+func setCartCookie(c *gin.Context, sessionId string) {
+	if os.Getenv("APP_ENV") == "production" {
+		c.SetSameSite(http.SameSiteNoneMode)
+		c.SetCookie("cart_session", sessionId, cartCookieMaxAge, "/", "", true, true)
+		return
+	}
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("cart_session", sessionId, cartCookieMaxAge, "/", "", false, true)
+}
 
 type CartController struct {
 	Db    *gorm.DB
@@ -41,7 +58,7 @@ func (b *CartController) AddToCart(c *gin.Context) {
 	}
 
 	// Set session cookie if not present or updated
-	c.SetCookie("cart_session", sessionId, 7*24*3600, "/", "", false, true)
+	setCartCookie(c, sessionId)
 
 	response.Success(c, "Item added to cart successfully", cartResp)
 }

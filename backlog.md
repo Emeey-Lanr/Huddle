@@ -53,9 +53,9 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
   A cart can mix products from different stores.
   Done when: each cart belongs to one store and rejects other stores' products.
 
-- [ ] **2.6 Cart cookie works across domains**
+- [x] **2.6 Cart cookie works across domains**
   `c.SetCookie(... secure=false ...)` with no `SameSite`.
-  Done when: cookie is `Secure` + `SameSite=None` in production.
+  Done when: cookie is `Secure` + `SameSite=None` in production. Set `APP_ENV=production` in production; anything else gives `SameSite=Lax` for http://localhost.
 
 - [ ] **2.7 Validation messages**
   `ValidationErrors` says "Password length…" for every `min` tag, has no message for `gte`/`len`, and panics if the error isn't `validator.ValidationErrors`. Currency uses `gte=3` instead of `len=3`.
@@ -87,7 +87,7 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
 - [ ] **4.1 Store management** — `GET /store/:id`, `PUT /store/:id`, list an admin's stores.
 - [ ] **4.2 Public storefront API** — `/storefront/*` routes authenticated with the store API key (no admin token): list products, product detail, store info. Reuse `helper.GetAllProductQueryChain` with `Active` forced to `true` so hidden products never show.
 - [ ] **4.3 API key middleware** — validate the hashed key from `stores.api_key`.
-- [ ] **4.4 CORS** — allow storefront domains to call the API.
+- [ ] **4.4 CORS** — allow storefront domains to call the API. Must send `Access-Control-Allow-Credentials: true` with the exact origin (not `*`), and storefronts must use `credentials: "include"`, or the cart cookie is never sent.
 - [ ] **4.5 Orders** — `orders` + `order_items` tables, `POST /orders/checkout` (snapshot prices, reserve stock), `GET /orders`, `GET /orders/:id`, order status.
 - [ ] **4.6 Paystack payments** — initialize payment, verify, webhook with signature check, mark order paid.
 - [ ] **4.7 Seller order notifications** — notify the seller on each paid order (email first, WhatsApp later).
@@ -98,7 +98,7 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
 
 - [ ] **5.1 Health check** — `GET /healthz` checking Postgres and Redis.
 - [ ] **5.2 Graceful shutdown + server timeouts** — replace `r.Run` with `http.Server`.
-- [ ] **5.3 Config** — port from env, Gin release mode in production.
+- [ ] **5.3 Config** — port from env, Gin release mode in production. Set `APP_ENV=production` (needed for the cart cookie, see 2.6).
 - [ ] **5.4 Cloudinary client created once** — not per upload (`internal/cloudinary/client.go`).
 - [ ] **5.5 Rate limiter in Redis** — so it works across more than one server.
 - [ ] **5.6 Dockerfile + docker-compose** — API, Postgres, Redis.

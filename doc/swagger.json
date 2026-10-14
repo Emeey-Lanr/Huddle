@@ -31,7 +31,7 @@
         "type": "apiKey",
         "in": "cookie",
         "name": "cart_session",
-        "description": "Set by POST /cart/ (HttpOnly, 7 days). Holds one cart per store."
+        "description": "Set by POST /cart/ (HttpOnly, 7 days). Holds one cart per store. With APP_ENV=production it is Secure and SameSite=None so storefronts on other domains can send it; otherwise SameSite=Lax."
       }
     },
     "parameters": {
