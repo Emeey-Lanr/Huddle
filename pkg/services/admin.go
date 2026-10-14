@@ -37,6 +37,9 @@ func AdminSignup(db *gorm.DB, req model.Admins) (*string, *utility.AppError) {
 		Password: hashedPassword,
 	}).Error
 
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return nil, &utility.AppError{StatusCode: http.StatusConflict, Message: "User already exists", Err: err}
+	}
 	if err != nil {
 		log.Printf("AdminSignup database error: %v", err)
 		return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Could not create admin user", Err: err}

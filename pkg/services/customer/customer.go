@@ -45,6 +45,9 @@ func Signup(db *gorm.DB, rdb *redis.Client, req model.CustomerSignupReq) (*strin
 	}
 
 	if err := db.Create(&customer).Error; err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			return nil, nil, &utility.AppError{StatusCode: http.StatusConflict, Message: "Customer with this email already exists in store", Err: err}
+		}
 		return nil, nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Could not create customer", Err: err}
 	}
 

@@ -51,11 +51,6 @@ func AddProduct (req model.Products, db *gorm.DB , rdb *redis.Client, adminId, s
 
 	 productId := utility.GenerateUUID()
      productPublicId := fmt.Sprintf("prod_%s", strings.ReplaceAll(utility.GenerateUUID().String(), "-", "")) 
-	 
-	 // Redis
-	 if  err := rdb.Set(context.Background(),productPublicId, productId.String(), 30 * time.Minute).Err(); err != nil{
-		return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Err", Err: err}
-	 }
 
 	 product := model.Products{Id: productId, 
 		StoreId:*internalStoreId,
@@ -69,8 +64,16 @@ func AddProduct (req model.Products, db *gorm.DB , rdb *redis.Client, adminId, s
 
 		
 	if err :=  db.Create(&product).Error;  err != nil{
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			return nil, &utility.AppError{StatusCode: http.StatusConflict, Message: "Product already exists", Err: err}
+		}
       return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err: err}
 	}
+
+	 // Cache public -> internal id only once the product exists.
+	 if  err := rdb.Set(context.Background(),productPublicId, productId.String(), 30 * time.Minute).Err(); err != nil{
+		return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Err", Err: err}
+	 }
 
   return &product, nil
 }
@@ -256,6 +259,9 @@ func UpdateProduct(db *gorm.DB, rdb *redis.Client, publicProductId, adminId stri
 
 	if len(updates) > 0 {
 		if err := db.Model(&model.Products{}).Where("id = ?", internalProductId).Updates(updates).Error; err != nil {
+			if errors.Is(err, gorm.ErrDuplicatedKey) {
+				return nil, &utility.AppError{StatusCode: http.StatusConflict, Message: "Another product in this store already has that name", Err: err}
+			}
 			return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Could not update product", Err: err}
 		}
 	}

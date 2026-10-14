@@ -146,7 +146,7 @@
         "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
       },
       "Conflict": {
-        "description": "Already exists, or not enough stock",
+        "description": "Already exists (names and emails are compared case-insensitively), or not enough stock",
         "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
       },
       "TooManyRequests": {
@@ -489,7 +489,8 @@
           "400": { "$ref": "#/components/responses/BadRequest" },
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
-          "404": { "$ref": "#/components/responses/NotFound" }
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "description": "Another product in this store already has that name", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
         }
       },
       "delete": {

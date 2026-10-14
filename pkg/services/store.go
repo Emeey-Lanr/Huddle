@@ -43,6 +43,9 @@ func CreateStore(db *gorm.DB, req model.Stores, adminId uuid.UUID, email string)
 	}
 
 	if err := db.Create(&data).Error; err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			return nil, nil, &utility.AppError{StatusCode: http.StatusConflict, Message: "Store name already exists", Err: err}
+		}
 		return nil, nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err: err}
 	}
 

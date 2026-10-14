@@ -55,6 +55,7 @@ func baseDSN() string {
 func open(dsn string) (*gorm.DB, error) {
 	return gorm.Open(postgres.Open(dsn), &gorm.Config{
 		NamingStrategy: schema.NamingStrategy{SingularTable: true},
+		TranslateError: true,
 		Logger:         logger.Default.LogMode(logger.Silent),
 	})
 }
@@ -93,8 +94,19 @@ func NewDB(t *testing.T) *gorm.DB {
 	}
 	t.Cleanup(func() { closeDB(db) })
 
-	files, _ := filepath.Glob(filepath.Join(repoRoot(), "db", "migrations", "*.up.sql"))
+	Migrate(t, db, "up")
+	return db
+}
+
+// Migrate applies every migration in db/migrations: "up" in order, or "down"
+// in reverse order.
+func Migrate(t *testing.T, db *gorm.DB, direction string) {
+	t.Helper()
+	files, _ := filepath.Glob(filepath.Join(repoRoot(), "db", "migrations", "*."+direction+".sql"))
 	sort.Strings(files)
+	if direction == "down" {
+		sort.Sort(sort.Reverse(sort.StringSlice(files)))
+	}
 	for _, f := range files {
 		sql, err := os.ReadFile(f)
 		if err != nil {
@@ -104,7 +116,6 @@ func NewDB(t *testing.T) *gorm.DB {
 			t.Fatalf("migration %s: %v", filepath.Base(f), err)
 		}
 	}
-	return db
 }
 
 func NewRedis(t *testing.T) (*miniredis.Miniredis, *redis.Client) {

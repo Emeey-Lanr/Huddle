@@ -64,15 +64,16 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
 
 ## 3. Database and tests
 
-- [ ] **3.1 Unique constraints and indexes** (new migration)
+- [x] **3.1 Unique constraints and indexes** (migration `000007`)
   - `admins(email)`, `admins(username)` unique
   - `customers(store_id, email)` unique
   - `products(public_id)` unique, index on `products(store_id)`
   - index on `images(product_id)`
   - `stores(admin_id, store_name)` unique
+  - also `products(store_id, name)` unique; emails, usernames and names compared case-insensitively. Duplicate-key errors return 409.
 
 - [ ] **3.2 DB-backed tests for services**
-  Admin, store, product and customer services have no tests. Run them against a real Postgres (Docker locally or CI service container).
+  Done so far: cart, product (update, list, add duplicates), ownership, image saving, duplicate/race checks for admin, store and customer signup, migration down/up. Still missing: admin signin, store create happy path, customer signin/profile, product delete and image upload. Run them against a real Postgres (Docker locally or CI service container).
 
 - [ ] **3.3 Controller/route tests**
   HTTP-level tests for each route: auth required, wrong owner → 403, bad payload → 400.

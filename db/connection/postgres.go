@@ -29,6 +29,8 @@ func ConnectToDb() *gorm.DB {
 			SingularTable: true,
 		},
 		PrepareStmt: true,
+		// Unique-constraint violations come back as gorm.ErrDuplicatedKey.
+		TranslateError: true,
 		NowFunc: func() time.Time {
 			return time.Now().UTC()
 		},
