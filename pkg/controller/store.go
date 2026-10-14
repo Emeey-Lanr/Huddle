@@ -133,3 +133,25 @@ func (b *StoreBase) Update(c *gin.Context) {
 	audit.LogEvent(c.Request.Context(), "STORE_UPDATED", adminId.String(), storeId, "SUCCESS", nil)
 	response.Success(c, "Store updated successfully", store)
 }
+
+func (b *StoreBase) RegenerateKey(c *gin.Context) {
+	adminId, ok := adminUUID(c)
+	if !ok {
+		return
+	}
+	storeId := c.Param("id")
+
+	apiKey, serviceErr := services.RegenerateStoreKey(b.Db, storeId, adminId)
+	if serviceErr != nil {
+		audit.LogEvent(c.Request.Context(), "STORE_KEY_REGENERATED", adminId.String(), storeId, "FAILED", map[string]interface{}{"error": serviceErr.Message})
+		response.Error(c, serviceErr.StatusCode, serviceErr.Message, serviceErr.Err)
+		return
+	}
+
+	// The key itself is never logged.
+	audit.LogEvent(c.Request.Context(), "STORE_KEY_REGENERATED", adminId.String(), storeId, "SUCCESS", nil)
+	response.Success(c, "Store key regenerated. The old key no longer works.", gin.H{
+		"store_id": storeId,
+		"api_key":  apiKey,
+	})
+}

@@ -20,6 +20,7 @@ func StoreRouter(r *gin.Engine, db *gorm.DB, rdb *redis.Client){
 		storeRoutes.GET("/stores", storeBase.List)
 		storeRoutes.GET("/:id", storeBase.Get)
 		storeRoutes.PUT("/:id", storeBase.Update)
+		storeRoutes.POST("/:id/key", storeBase.RegenerateKey)
 	}
 
 }

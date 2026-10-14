@@ -125,3 +125,27 @@ func UpdateStore(db *gorm.DB, publicStoreId string, adminId uuid.UUID, req model
 
 	return GetStore(db, publicStoreId, adminId)
 }
+
+// RegenerateStoreKey issues a new publishable store key and invalidates the
+// old one immediately. Only the hash is stored; the key is returned once.
+func RegenerateStoreKey(db *gorm.DB, publicStoreId string, adminId uuid.UUID) (string, *utility.AppError) {
+	store, appErr := ownedStore(db, publicStoreId, adminId)
+	if appErr != nil {
+		return "", appErr
+	}
+
+	apiKey, err := utility.GenerateAPIKey()
+	if err != nil {
+		return "", &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err: err}
+	}
+
+	err = db.Model(&model.Stores{}).Where("id = ?", store.ID).Updates(map[string]interface{}{
+		"api_key":    utility.HashAPIKey(apiKey),
+		"updated_at": time.Now().UTC(),
+	}).Error
+	if err != nil {
+		return "", &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Could not regenerate store key", Err: err}
+	}
+
+	return apiKey, nil
+}
