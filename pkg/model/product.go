@@ -33,14 +33,14 @@ type ProductResponse struct {
 }
 
 
-// product update request
+// product update request; nil or empty fields are left unchanged
 type ProductUpdate struct {
-	Name          string          `json:"name"`
-	Description   string          `json:"description"`
-	Price         decimal.Decimal `json:"price"`
-	Currency      string          `json:"currency"`
-	StockQuantity int             `json:"stock_quantity"`
-	Active        *bool           `json:"active"`
+	Name          string           `json:"name"`
+	Description   string           `json:"description"`
+	Price         *decimal.Decimal `json:"price"`
+	Currency      string           `json:"currency"`
+	StockQuantity *int             `json:"stock_quantity"`
+	Active        *bool            `json:"active"`
 }
 
 // product query

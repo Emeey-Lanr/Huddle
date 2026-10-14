@@ -33,7 +33,7 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
 
 ## 2. Correctness fixes
 
-- [ ] **2.1 Product update resets stock to 0**
+- [x] **2.1 Product update resets stock to 0**
   `pkg/services/product.go:221` — `StockQuantity >= 0` is always true when the field is omitted.
   Done when: fields left out of the request are not changed (use pointer fields like `Active`).
 

@@ -208,6 +208,13 @@ func DeleteProduct (db *gorm.DB, rdb *redis.Client, publicProductId, adminId str
 }
 
 func UpdateProduct(db *gorm.DB, rdb *redis.Client, publicProductId, adminId string, req model.ProductUpdate) (*model.ProductResponse, *utility.AppError) {
+	if req.Price != nil && req.Price.IsNegative() {
+		return nil, &utility.AppError{StatusCode: http.StatusBadRequest, Message: "Price cannot be negative", Err: errors.New("negative price")}
+	}
+	if req.StockQuantity != nil && *req.StockQuantity < 0 {
+		return nil, &utility.AppError{StatusCode: http.StatusBadRequest, Message: "Stock quantity cannot be negative", Err: errors.New("negative stock")}
+	}
+
 	internalProductId, helperErr := helper.VerifyProductOwnership(db, rdb, publicProductId, adminId)
 	if helperErr != nil {
 		return nil, helperErr
@@ -220,14 +227,14 @@ func UpdateProduct(db *gorm.DB, rdb *redis.Client, publicProductId, adminId stri
 	if req.Description != "" {
 		updates["description"] = req.Description
 	}
-	if !req.Price.IsZero() {
-		updates["price"] = req.Price
+	if req.Price != nil {
+		updates["price"] = *req.Price
 	}
 	if req.Currency != "" {
 		updates["currency"] = req.Currency
 	}
-	if req.StockQuantity >= 0 {
-		updates["stock_quantity"] = req.StockQuantity
+	if req.StockQuantity != nil {
+		updates["stock_quantity"] = *req.StockQuantity
 	}
 	if req.Active != nil {
 		updates["active"] = *req.Active
