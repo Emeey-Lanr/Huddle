@@ -3,6 +3,7 @@ package cart
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"huddle/pkg/model"
 	"huddle/pkg/utility"
@@ -14,7 +15,35 @@ import (
 	"gorm.io/gorm"
 )
 
-func AddToCart(req *model.CartItem, sessionCookie string, db *gorm.DB, rdb *redis.Client) (string, *model.CartResponse, *utility.AppError) {
+// findSellableProduct loads an active product by its public id.
+func findSellableProduct(db *gorm.DB, publicProductId string) (*model.Products, *utility.AppError) {
+	var product model.Products
+	if err := db.Where("public_id = ? AND active = ?", publicProductId, true).First(&product).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, &utility.AppError{StatusCode: http.StatusNotFound, Message: "Product not found", Err: err}
+		}
+		return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err: err}
+	}
+	return &product, nil
+}
+
+func checkStock(product *model.Products, quantity uint) *utility.AppError {
+	if product.StockQuantity < 0 || quantity > uint(product.StockQuantity) {
+		return &utility.AppError{
+			StatusCode: http.StatusConflict,
+			Message:    fmt.Sprintf("Only %d of %s left in stock", max(product.StockQuantity, 0), product.Name),
+			Err:        errors.New("insufficient stock"),
+		}
+	}
+	return nil
+}
+
+func AddToCart(req *model.AddCartItemRequest, sessionCookie string, db *gorm.DB, rdb *redis.Client) (string, *model.CartResponse, *utility.AppError) {
+	product, appErr := findSellableProduct(db, req.ProductId)
+	if appErr != nil {
+		return "", nil, appErr
+	}
+
 	sessionId := sessionCookie
 	if sessionId == "" {
 		sessionId = fmt.Sprintf("cart_%s", strings.ReplaceAll(utility.GenerateUUID().String(), "-", ""))
@@ -29,17 +58,33 @@ func AddToCart(req *model.CartItem, sessionCookie string, db *gorm.DB, rdb *redi
 		_ = json.Unmarshal([]byte(val), &items)
 	}
 
-	// Update existing product quantity or append new item
-	found := false
+	// Update existing product quantity or append new item; name and price
+	// are refreshed from the database either way.
+	index := -1
+	quantity := req.Quantity
 	for i, item := range items {
 		if item.ProductId == req.ProductId {
-			items[i].Quantity += req.Quantity
-			found = true
+			index = i
+			quantity += item.Quantity
 			break
 		}
 	}
-	if !found {
-		items = append(items, *req)
+
+	if appErr := checkStock(product, quantity); appErr != nil {
+		return "", nil, appErr
+	}
+
+	item := model.CartItem{
+		ProductId:   product.PublicId,
+		ProductName: product.Name,
+		Price:       product.Price,
+		Currency:    product.Currency,
+		Quantity:    quantity,
+	}
+	if index >= 0 {
+		items[index] = item
+	} else {
+		items = append(items, item)
 	}
 
 	bytes, err := json.Marshal(items)
@@ -83,9 +128,17 @@ func GetCart(sessionCookie string, rdb *redis.Client) (*model.CartResponse, *uti
 	}, nil
 }
 
-func UpdateCartItemQuantity(productId string, quantity uint, sessionCookie string, rdb *redis.Client) (*model.CartResponse, *utility.AppError) {
+func UpdateCartItemQuantity(productId string, quantity uint, sessionCookie string, db *gorm.DB, rdb *redis.Client) (*model.CartResponse, *utility.AppError) {
 	if sessionCookie == "" {
 		return nil, &utility.AppError{StatusCode: http.StatusNotFound, Message: "Cart session not found"}
+	}
+
+	product, appErr := findSellableProduct(db, productId)
+	if appErr != nil {
+		return nil, appErr
+	}
+	if appErr := checkStock(product, quantity); appErr != nil {
+		return nil, appErr
 	}
 
 	redisKey := fmt.Sprintf("cart:%s", sessionCookie)
@@ -105,6 +158,9 @@ func UpdateCartItemQuantity(productId string, quantity uint, sessionCookie strin
 	for i, item := range items {
 		if item.ProductId == productId {
 			items[i].Quantity = quantity
+			items[i].ProductName = product.Name
+			items[i].Price = product.Price
+			items[i].Currency = product.Currency
 			found = true
 			break
 		}

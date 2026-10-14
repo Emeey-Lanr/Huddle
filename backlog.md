@@ -4,29 +4,29 @@ Goal: a secure, reliable store platform that at least 200 Nigerian SMEs can use,
 
 Pick items top to bottom. Each item is done when its "Done when" line is true and `go test ./...` passes.
 
-Run known-bug tests with `HUDDLE_KNOWN_BUGS=1 go test ./...`. They fail until the bug is fixed, then remove the `knownBug(...)` skip.
+Database tests use your local Postgres: a separate `huddle_test` database (never the dev `huddle` one), one throwaway schema per test, built from `db/migrations`. Set `TEST_DATABASE_URL` to point elsewhere. If Postgres is unreachable, those tests skip.
 
 ---
 
 ## 1. Security fixes
 
-- [ ] **1.1 JWT secret is empty unless set in the OS environment**
+- [x] **1.1 JWT secret is empty unless set in the OS environment**
   `pkg/utility/jwt.go:15` reads `SECRET_KEY` before `godotenv.Load()` runs, so tokens are signed with an empty key and anyone can forge one.
   Done when: secret is read after env loads, the app refuses to start without one, and `TestAuthMiddleware_ForgedTokenWithEmptyKeyRejected` passes.
 
-- [ ] **1.2 Separate admin and customer tokens**
+- [x] **1.2 Separate admin and customer tokens**
   Customers get the same token type as admins (`admin_id` claim), so a customer token works on `/product` and `/store` routes.
   Done when: tokens carry a `role` claim, admin routes reject customer tokens, `/customer/profile` rejects admin tokens.
 
-- [ ] **1.3 Ownership checks on every product route**
+- [x] **1.3 Ownership checks on every product route**
   Only `POST /product` calls `VerifyOwnerShip`. GET, PUT, DELETE and image upload on `/product/:id` let any admin touch any store's products.
   Done when: every admin product route checks the product's store belongs to the caller (403 otherwise).
 
-- [ ] **1.4 Cart takes the price from the database, not the client**
+- [x] **1.4 Cart takes the price from the database, not the client**
   `model.CartItem` accepts `product_price` and `product_name` from the request.
   Done when: cart takes only `product_id` + `quantity`, looks up price/name/stock/store from the DB, and `TestAddToCart_PriceComesFromDatabase` passes.
 
-- [ ] **1.5 Turn on the rate limiter**
+- [x] **1.5 Turn on the rate limiter**
   `middleware.RateLimiter` exists but is not registered. Apply it at least to signup/signin routes.
 
 ---
@@ -78,7 +78,7 @@ Run known-bug tests with `HUDDLE_KNOWN_BUGS=1 go test ./...`. They fail until th
   HTTP-level tests for each route: auth required, wrong owner → 403, bad payload → 400.
 
 - [ ] **3.4 Keep Swagger in sync**
-  `doc/swagger.json` is missing `/cart/items/{id}`. Regenerate with `swag init` on each change (or check in CI).
+  `doc/swagger.json` is missing `/cart/items/{id}`, and `POST /cart` now takes only `product_id` + `quantity`. Customer profile needs a customer token. Regenerate with `swag init` on each change (or check in CI).
 
 ---
 
@@ -124,3 +124,4 @@ Run known-bug tests with `HUDDLE_KNOWN_BUGS=1 go test ./...`. They fail until th
 
 - [x] Re-evaluated codebase (Oct 2026)
 - [x] First tests: utility, middleware, response, cart, image validation (`go test ./pkg/...` passes)
+- [x] Section 1 security fixes, with Postgres-backed tests for cart and ownership

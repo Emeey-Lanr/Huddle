@@ -14,34 +14,42 @@ import (
 	"github.com/google/uuid"
 )
 
-func init() { gin.SetMode(gin.TestMode) }
-
-// knownBug skips a test that documents an existing defect.
-// Run with HUDDLE_KNOWN_BUGS=1 to see them fail until fixed.
-func knownBug(t *testing.T, why string) {
-	t.Helper()
-	if os.Getenv("HUDDLE_KNOWN_BUGS") != "1" {
-		t.Skip("known bug: " + why)
-	}
+func TestMain(m *testing.M) {
+	gin.SetMode(gin.TestMode)
+	os.Setenv("SECRET_KEY", "test-secret")
+	os.Exit(m.Run())
 }
 
 func authRouter() *gin.Engine {
 	r := gin.New()
-	r.GET("/p", AuthMiddleware, func(c *gin.Context) {
-		id, _ := c.Get("adminId")
-		c.String(http.StatusOK, id.(string))
+	r.GET("/admin", AuthMiddleware, func(c *gin.Context) {
+		c.String(http.StatusOK, c.GetString("adminId"))
+	})
+	r.GET("/customer", CustomerAuthMiddleware, func(c *gin.Context) {
+		c.String(http.StatusOK, c.GetString("customerId"))
 	})
 	return r
 }
 
-func doAuth(header string) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(http.MethodGet, "/p", nil)
+func doAuthPath(path, header string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodGet, path, nil)
 	if header != "" {
 		req.Header.Set("Authorization", header)
 	}
 	w := httptest.NewRecorder()
 	authRouter().ServeHTTP(w, req)
 	return w
+}
+
+func doAuth(header string) *httptest.ResponseRecorder { return doAuthPath("/admin", header) }
+
+func token(t *testing.T, id uuid.UUID, role string) string {
+	t.Helper()
+	tok, err := utility.CreateToken(id, "a@b.com", role)
+	if err != nil {
+		t.Fatalf("CreateToken: %v", err)
+	}
+	return "Bearer " + tok
 }
 
 func TestAuthMiddleware_MissingHeader(t *testing.T) {
@@ -64,31 +72,49 @@ func TestAuthMiddleware_InvalidToken(t *testing.T) {
 	}
 }
 
-func TestAuthMiddleware_ValidToken(t *testing.T) {
+func TestAuthMiddleware_ValidAdminToken(t *testing.T) {
 	id := uuid.New()
-	token, err := utility.CreateToken(id, "a@b.com")
-	if err != nil {
-		t.Fatalf("CreateToken: %v", err)
-	}
-	w := doAuth("Bearer " + token)
+	w := doAuth(token(t, id, utility.RoleAdmin))
 	if w.Code != http.StatusOK || w.Body.String() != id.String() {
 		t.Errorf("status = %d body = %q", w.Code, w.Body.String())
 	}
 }
 
-// SECRET_KEY is read into a package variable before main() calls godotenv.Load(),
-// so unless it is set in the OS environment, tokens are signed with an empty key
-// and anyone can forge one.
+func TestAuthMiddleware_CustomerTokenRejected(t *testing.T) {
+	if w := doAuth(token(t, uuid.New(), utility.RoleCustomer)); w.Code != http.StatusForbidden {
+		t.Errorf("customer token on admin route: status = %d, want 403", w.Code)
+	}
+}
+
+func TestCustomerAuthMiddleware(t *testing.T) {
+	id := uuid.New()
+	w := doAuthPath("/customer", token(t, id, utility.RoleCustomer))
+	if w.Code != http.StatusOK || w.Body.String() != id.String() {
+		t.Errorf("customer token: status = %d body = %q", w.Code, w.Body.String())
+	}
+	if w := doAuthPath("/customer", token(t, uuid.New(), utility.RoleAdmin)); w.Code != http.StatusForbidden {
+		t.Errorf("admin token on customer route: status = %d, want 403", w.Code)
+	}
+}
+
 func TestAuthMiddleware_ForgedTokenWithEmptyKeyRejected(t *testing.T) {
-	knownBug(t, "jwt secret is empty when SECRET_KEY only comes from .env")
 	claims := jwt.MapClaims{
-		"admin_id": uuid.NewString(),
-		"email":    "attacker@example.com",
-		"exp":      time.Now().Add(time.Hour).Unix(),
+		"user_id": uuid.NewString(),
+		"email":   "attacker@example.com",
+		"role":    utility.RoleAdmin,
+		"exp":     time.Now().Add(time.Hour).Unix(),
 	}
 	forged, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(""))
 	if w := doAuth("Bearer " + forged); w.Code != http.StatusUnauthorized {
 		t.Errorf("forged token accepted: status = %d", w.Code)
+	}
+}
+
+func TestAuthMiddleware_TokenWithoutRoleRejected(t *testing.T) {
+	claims := jwt.MapClaims{"user_id": uuid.NewString(), "exp": time.Now().Add(time.Hour).Unix()}
+	old, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte("test-secret"))
+	if w := doAuth("Bearer " + old); w.Code != http.StatusForbidden {
+		t.Errorf("token without role: status = %d, want 403", w.Code)
 	}
 }
 

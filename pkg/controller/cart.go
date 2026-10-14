@@ -18,7 +18,7 @@ type CartController struct {
 }
 
 func (b *CartController) AddToCart(c *gin.Context) {
-	var req model.CartItem
+	var req model.AddCartItemRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, http.StatusBadRequest, "Invalid request payload", err)
@@ -80,7 +80,7 @@ func (b *CartController) UpdateCartItem(c *gin.Context) {
 
 	cookie, _ := c.Cookie("cart_session")
 
-	cartResp, serviceErr := cart.UpdateCartItemQuantity(productId, req.Quantity, cookie, b.Redis)
+	cartResp, serviceErr := cart.UpdateCartItemQuantity(productId, req.Quantity, cookie, b.Db, b.Redis)
 	if serviceErr != nil {
 		response.Error(c, serviceErr.StatusCode, serviceErr.Message, serviceErr.Err)
 		return

@@ -72,7 +72,7 @@ func (b *CustomerBase) Signin(c *gin.Context) {
 }
 
 func (b *CustomerBase) GetProfile(c *gin.Context) {
-	customerId, exists := c.Get("adminId")
+	customerId, exists := c.Get("customerId")
 	if !exists {
 		response.Error(c, http.StatusUnauthorized, "Unauthorized access", nil)
 		return

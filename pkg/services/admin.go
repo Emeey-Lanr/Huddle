@@ -42,7 +42,7 @@ func AdminSignup(db *gorm.DB, req model.Admins) (*string, *utility.AppError) {
 		return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Could not create admin user", Err: err}
 	}
 
-	token, err := utility.CreateToken(id, req.Email)
+	token, err := utility.CreateToken(id, req.Email, utility.RoleAdmin)
 	if err != nil {
 		log.Printf("AdminSignup token generation error: %v", err)
 		return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err: err}
@@ -67,7 +67,7 @@ func AdminSignin(db *gorm.DB, req model.AdminSignin) (*string, *utility.AppError
 		return nil, &utility.AppError{StatusCode: http.StatusUnauthorized, Message: "Invalid credentials", Err: err}
 	}
 
-	token, err := utility.CreateToken(admin.Id, admin.Email)
+	token, err := utility.CreateToken(admin.Id, admin.Email, utility.RoleAdmin)
 	if err != nil {
 		return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err: err}
 	}

@@ -76,8 +76,8 @@ func AddProduct (req model.Products, db *gorm.DB , rdb *redis.Client, adminId, s
 }
 
 
-func  AddImages (db *gorm.DB, rdb *redis.Client, images []*multipart.FileHeader,  publicProductId string) (*model.ImagesCreatedResponse, *utility.AppError){
-	internalProductId, helperErr := helper.ValidateProductId(db,rdb, publicProductId)
+func  AddImages (db *gorm.DB, rdb *redis.Client, images []*multipart.FileHeader,  publicProductId, adminId string) (*model.ImagesCreatedResponse, *utility.AppError){
+	internalProductId, helperErr := helper.VerifyProductOwnership(db, rdb, publicProductId, adminId)
 	 if helperErr != nil{
 		return nil, helperErr
 	 }	 
@@ -118,16 +118,24 @@ func  AddImages (db *gorm.DB, rdb *redis.Client, images []*multipart.FileHeader,
    return &imageResponse, nil
 }
 
-func GetAllProducts (db *gorm.DB, rdb *redis.Client, queryData model.ProductQuery) (*[]model.ProductResponse, *utility.AppError) {
+func GetAllProducts (db *gorm.DB, rdb *redis.Client, queryData model.ProductQuery, adminId string) (*[]model.ProductResponse, *utility.AppError) {
+	adminIdUUID, err := utility.StringToUUID(adminId)
+	if err != nil {
+		return nil, &utility.AppError{StatusCode: http.StatusUnauthorized, Message: "Invalid admin id", Err: err}
+	}
 
      internalStoreId, helperErr :=   helper.GetInternalStoreId(rdb, db, queryData.StoreId);
 	 if helperErr != nil {
 		return nil,  helperErr
 	 }
 
+	 if helperErr := helper.VerifyOwnerShip(db, *internalStoreId, adminIdUUID); helperErr != nil {
+		return nil, helperErr
+	 }
+
 	   query :=  helper.GetAllProductQueryChain(db, *internalStoreId, queryData)
 	    var  products  []model.ProductResponse
-	   err := query.Find(&products).Error
+	   err = query.Find(&products).Error
 	   if err != nil{
 		 return nil,  &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Err", Err: err}
 	   }
@@ -136,8 +144,8 @@ func GetAllProducts (db *gorm.DB, rdb *redis.Client, queryData model.ProductQuer
 } 
 
 
-func GetAProduct (db *gorm.DB, rdb *redis.Client, publicId string) (*model.ProductResponse, *[]model.ImagesResponse, *utility.AppError){
-	 internalId, helperErr := helper.ValidateProductId(db, rdb, publicId)
+func GetAProduct (db *gorm.DB, rdb *redis.Client, publicId, adminId string) (*model.ProductResponse, *[]model.ImagesResponse, *utility.AppError){
+	 internalId, helperErr := helper.VerifyProductOwnership(db, rdb, publicId, adminId)
 	 if helperErr != nil{
 		return nil, nil, helperErr
 	 }
@@ -163,8 +171,8 @@ func GetAProduct (db *gorm.DB, rdb *redis.Client, publicId string) (*model.Produ
 
 }
 
-func DeleteProduct (db *gorm.DB, rdb *redis.Client, publicProductId string) *utility.AppError{
-	  internalProductId, helperErr := helper.ValidateProductId(db,rdb, publicProductId)
+func DeleteProduct (db *gorm.DB, rdb *redis.Client, publicProductId, adminId string) *utility.AppError{
+	  internalProductId, helperErr := helper.VerifyProductOwnership(db, rdb, publicProductId, adminId)
 	 if helperErr != nil{
 		return  helperErr
 	 }	 
@@ -199,8 +207,8 @@ func DeleteProduct (db *gorm.DB, rdb *redis.Client, publicProductId string) *uti
 
 }
 
-func UpdateProduct(db *gorm.DB, rdb *redis.Client, publicProductId string, req model.ProductUpdate) (*model.ProductResponse, *utility.AppError) {
-	internalProductId, helperErr := helper.ValidateProductId(db, rdb, publicProductId)
+func UpdateProduct(db *gorm.DB, rdb *redis.Client, publicProductId, adminId string, req model.ProductUpdate) (*model.ProductResponse, *utility.AppError) {
+	internalProductId, helperErr := helper.VerifyProductOwnership(db, rdb, publicProductId, adminId)
 	if helperErr != nil {
 		return nil, helperErr
 	}

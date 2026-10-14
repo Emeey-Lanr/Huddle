@@ -12,16 +12,24 @@ import (
 
 func withSecret(t *testing.T, key string) {
 	t.Helper()
-	old := secretKey
-	secretKey = []byte(key)
-	t.Cleanup(func() { secretKey = old })
+	t.Setenv("SECRET_KEY", key)
+}
+
+func sign(t *testing.T, claims jwt.MapClaims) string {
+	t.Helper()
+	key, err := secretKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(key)
+	return token
 }
 
 func TestCreateAndVerifyToken(t *testing.T) {
 	withSecret(t, "test-secret")
 	id := uuid.New()
 
-	token, err := CreateToken(id, "seller@example.com")
+	token, err := CreateToken(id, "seller@example.com", RoleAdmin)
 	if err != nil {
 		t.Fatalf("CreateToken: %v", err)
 	}
@@ -30,8 +38,11 @@ func TestCreateAndVerifyToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("VerifyToken: %v", err)
 	}
-	if claims.AdminId != id.String() {
-		t.Errorf("AdminId = %q, want %q", claims.AdminId, id)
+	if claims.UserId != id.String() {
+		t.Errorf("UserId = %q, want %q", claims.UserId, id)
+	}
+	if claims.Role != RoleAdmin {
+		t.Errorf("Role = %q, want %q", claims.Role, RoleAdmin)
 	}
 	if claims.Email != "seller@example.com" {
 		t.Errorf("Email = %q", claims.Email)
@@ -40,9 +51,9 @@ func TestCreateAndVerifyToken(t *testing.T) {
 
 func TestVerifyToken_WrongSecretRejected(t *testing.T) {
 	withSecret(t, "secret-a")
-	token, _ := CreateToken(uuid.New(), "a@b.com")
+	token, _ := CreateToken(uuid.New(), "a@b.com", RoleAdmin)
 
-	secretKey = []byte("secret-b")
+	withSecret(t, "secret-b")
 	if _, err := VerifyToken(token); err == nil {
 		t.Fatal("token signed with a different secret was accepted")
 	}
@@ -55,9 +66,7 @@ func TestVerifyToken_ExpiredRejected(t *testing.T) {
 		"email":    "a@b.com",
 		"exp":      time.Now().Add(-time.Minute).Unix(),
 	}
-	token, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(secretKey)
-
-	if _, err := VerifyToken(token); err == nil {
+	if _, err := VerifyToken(sign(t, claims)); err == nil {
 		t.Fatal("expired token was accepted")
 	}
 }
@@ -69,6 +78,21 @@ func TestVerifyToken_NoneAlgRejected(t *testing.T) {
 
 	if _, err := VerifyToken(token); err == nil {
 		t.Fatal("unsigned (alg=none) token was accepted")
+	}
+}
+
+func TestToken_MissingSecret(t *testing.T) {
+	withSecret(t, "")
+	if _, err := CreateToken(uuid.New(), "a@b.com", RoleAdmin); err != ErrMissingSecret {
+		t.Errorf("CreateToken err = %v, want ErrMissingSecret", err)
+	}
+
+	// A token signed with an empty key must never verify.
+	forged, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"user_id": uuid.NewString(), "role": RoleAdmin, "exp": time.Now().Add(time.Hour).Unix(),
+	}).SignedString([]byte(""))
+	if _, err := VerifyToken(forged); err == nil {
+		t.Error("token signed with empty key was accepted")
 	}
 }
 

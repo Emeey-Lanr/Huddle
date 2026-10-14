@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 	"huddle/db/connection"
 	"huddle/pkg/audit"
 	"huddle/pkg/router"
@@ -14,6 +15,10 @@ func main() {
 
 	if err := godotenv.Load(); err != nil {
 		log.Println("Note: .env file not loaded, falling back to environment variables:", err)
+	}
+
+	if os.Getenv("SECRET_KEY") == "" {
+		log.Fatal("SECRET_KEY must be set (in .env or the environment) to sign auth tokens")
 	}
 
 	db := connection.ConnectToDb()

@@ -67,7 +67,7 @@ func (b *ProductBase) AddImages(c *gin.Context) {
 	}
 
 	files := form.File["image"]
-	imageUploadResp, serviceErr := services.AddImages(b.Db, b.Rdb, files, publicProductId)
+	imageUploadResp, serviceErr := services.AddImages(b.Db, b.Rdb, files, publicProductId, c.GetString("adminId"))
 	if serviceErr != nil {
 		audit.LogEvent(c.Request.Context(), "PRODUCT_IMAGES_UPLOADED", actorStr, publicProductId, "FAILED", map[string]interface{}{"error": serviceErr.Message})
 		response.Error(c, serviceErr.StatusCode, serviceErr.Message, serviceErr.Err)
@@ -86,7 +86,7 @@ func (b *ProductBase) GetAllProducts(c *gin.Context) {
 		return
 	}
 
-	products, serviceErr := services.GetAllProducts(b.Db, b.Rdb, query)
+	products, serviceErr := services.GetAllProducts(b.Db, b.Rdb, query, c.GetString("adminId"))
 	if serviceErr != nil {
 		response.Error(c, serviceErr.StatusCode, serviceErr.Message, serviceErr.Err)
 		return
@@ -102,7 +102,7 @@ func (b *ProductBase) GetAProduct(c *gin.Context) {
 		return
 	}
 
-	product, images, serviceErr := services.GetAProduct(b.Db, b.Rdb, publicId)
+	product, images, serviceErr := services.GetAProduct(b.Db, b.Rdb, publicId, c.GetString("adminId"))
 	if serviceErr != nil {
 		response.Error(c, serviceErr.StatusCode, serviceErr.Message, serviceErr.Err)
 		return
@@ -125,7 +125,7 @@ func (b *ProductBase) DeleteProduct(c *gin.Context) {
 		return
 	}
 
-	if serviceErr := services.DeleteProduct(b.Db, b.Rdb, publicId); serviceErr != nil {
+	if serviceErr := services.DeleteProduct(b.Db, b.Rdb, publicId, actorStr); serviceErr != nil {
 		audit.LogEvent(c.Request.Context(), "PRODUCT_DELETED", actorStr, publicId, "FAILED", map[string]interface{}{"error": serviceErr.Message})
 		response.Error(c, serviceErr.StatusCode, serviceErr.Message, serviceErr.Err)
 		return
@@ -154,7 +154,7 @@ func (b *ProductBase) UpdateProduct(c *gin.Context) {
 		return
 	}
 
-	product, serviceErr := services.UpdateProduct(b.Db, b.Rdb, publicId, req)
+	product, serviceErr := services.UpdateProduct(b.Db, b.Rdb, publicId, actorStr, req)
 	if serviceErr != nil {
 		audit.LogEvent(c.Request.Context(), "PRODUCT_UPDATED", actorStr, publicId, "FAILED", map[string]interface{}{"error": serviceErr.Message})
 		response.Error(c, serviceErr.StatusCode, serviceErr.Message, serviceErr.Err)

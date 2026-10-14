@@ -14,8 +14,8 @@ func CustomerRoutes(r *gin.Engine, db *gorm.DB, rdb *redis.Client) {
 	customerGroup := r.Group("/customer")
 
 	{
-		customerGroup.POST("/signup", customerBase.Signup)
-		customerGroup.POST("/signin", customerBase.Signin)
-		customerGroup.GET("/profile", middleware.AuthMiddleware, customerBase.GetProfile)
+		customerGroup.POST("/signup", middleware.RateLimiter, customerBase.Signup)
+		customerGroup.POST("/signin", middleware.RateLimiter, customerBase.Signin)
+		customerGroup.GET("/profile", middleware.CustomerAuthMiddleware, customerBase.GetProfile)
 	}
 }

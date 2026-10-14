@@ -2,38 +2,49 @@ package cart
 
 import (
 	"net/http"
-	"os"
 	"testing"
 
 	"huddle/pkg/model"
+	"huddle/pkg/testutil"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
+	"gorm.io/gorm"
 )
 
-func knownBug(t *testing.T, why string) {
+type env struct {
+	db  *gorm.DB
+	mr  *miniredis.Miniredis
+	rdb *redis.Client
+	bag model.Products // ₦15,000, 10 in stock
+	hat model.Products // ₦5,000, 3 in stock
+}
+
+func setup(t *testing.T) env {
 	t.Helper()
-	if os.Getenv("HUDDLE_KNOWN_BUGS") != "1" {
-		t.Skip("known bug: " + why)
+	db := testutil.NewDB(t)
+	mr, rdb := testutil.NewRedis(t)
+	admin := testutil.SeedAdmin(t, db)
+	store := testutil.SeedStore(t, db, admin.Id)
+	return env{
+		db:  db,
+		mr:  mr,
+		rdb: rdb,
+		bag: testutil.SeedProduct(t, db, store.ID, "Ankara bag", 15000, 10),
+		hat: testutil.SeedProduct(t, db, store.ID, "Fila cap", 5000, 3),
 	}
 }
 
-func newRedis(t *testing.T) (*miniredis.Miniredis, *redis.Client) {
-	t.Helper()
-	mr := miniredis.RunT(t)
-	return mr, redis.NewClient(&redis.Options{Addr: mr.Addr()})
-}
-
-func item(id string, qty uint) *model.CartItem {
-	return &model.CartItem{ProductId: id, ProductName: "Ankara bag", Price: 15000, Currency: "NGN", Quantity: qty}
+func add(id string, qty uint) *model.AddCartItemRequest {
+	return &model.AddCartItemRequest{ProductId: id, Quantity: qty}
 }
 
 func TestAddToCart_NewSession(t *testing.T) {
-	mr, rdb := newRedis(t)
+	e := setup(t)
 
-	sid, resp, err := AddToCart(item("prod_1", 2), "", nil, rdb)
+	sid, resp, err := AddToCart(add(e.bag.PublicId, 2), "", e.db, e.rdb)
 	if err != nil {
-		t.Fatalf("AddToCart: %v", err.Err)
+		t.Fatalf("AddToCart: %s %v", err.Message, err.Err)
 	}
 	if sid == "" || resp.SessionId != sid {
 		t.Fatalf("session id not returned: %q", sid)
@@ -41,18 +52,31 @@ func TestAddToCart_NewSession(t *testing.T) {
 	if len(resp.Items) != 1 || resp.Items[0].Quantity != 2 {
 		t.Errorf("items = %+v", resp.Items)
 	}
-	if !mr.Exists("cart:" + sid) {
+	if !e.mr.Exists("cart:" + sid) {
 		t.Error("cart not persisted in redis")
 	}
-	if ttl := mr.TTL("cart:" + sid); ttl <= 0 {
+	if ttl := e.mr.TTL("cart:" + sid); ttl <= 0 {
 		t.Errorf("cart has no expiry (ttl %v)", ttl)
 	}
 }
 
+func TestAddToCart_PriceAndNameComeFromDatabase(t *testing.T) {
+	e := setup(t)
+
+	_, resp, err := AddToCart(add(e.bag.PublicId, 1), "", e.db, e.rdb)
+	if err != nil {
+		t.Fatalf("AddToCart: %s", err.Message)
+	}
+	got := resp.Items[0]
+	if !got.Price.Equal(e.bag.Price) || got.ProductName != "Ankara bag" || got.Currency != "NGN" {
+		t.Errorf("item = %+v, want price %s from database", got, e.bag.Price)
+	}
+}
+
 func TestAddToCart_SameProductIncrementsQuantity(t *testing.T) {
-	_, rdb := newRedis(t)
-	sid, _, _ := AddToCart(item("prod_1", 2), "", nil, rdb)
-	_, resp, _ := AddToCart(item("prod_1", 3), sid, nil, rdb)
+	e := setup(t)
+	sid, _, _ := AddToCart(add(e.bag.PublicId, 2), "", e.db, e.rdb)
+	_, resp, _ := AddToCart(add(e.bag.PublicId, 3), sid, e.db, e.rdb)
 
 	if len(resp.Items) != 1 || resp.Items[0].Quantity != 5 {
 		t.Errorf("items = %+v, want one item with quantity 5", resp.Items)
@@ -60,97 +84,115 @@ func TestAddToCart_SameProductIncrementsQuantity(t *testing.T) {
 }
 
 func TestAddToCart_DifferentProductsAppend(t *testing.T) {
-	_, rdb := newRedis(t)
-	sid, _, _ := AddToCart(item("prod_1", 1), "", nil, rdb)
-	_, resp, _ := AddToCart(item("prod_2", 1), sid, nil, rdb)
+	e := setup(t)
+	sid, _, _ := AddToCart(add(e.bag.PublicId, 1), "", e.db, e.rdb)
+	_, resp, _ := AddToCart(add(e.hat.PublicId, 1), sid, e.db, e.rdb)
 
 	if len(resp.Items) != 2 {
 		t.Errorf("items = %+v, want 2", resp.Items)
 	}
 }
 
-func TestGetCart(t *testing.T) {
-	_, rdb := newRedis(t)
+func TestAddToCart_UnknownProduct(t *testing.T) {
+	e := setup(t)
+	if _, _, err := AddToCart(add("prod_missing", 1), "", e.db, e.rdb); err == nil || err.StatusCode != http.StatusNotFound {
+		t.Errorf("err = %+v, want 404", err)
+	}
+}
 
-	resp, err := GetCart("", rdb)
+func TestAddToCart_InactiveProduct(t *testing.T) {
+	e := setup(t)
+	e.db.Model(&model.Products{}).Where("id = ?", e.bag.Id).Update("active", false)
+
+	if _, _, err := AddToCart(add(e.bag.PublicId, 1), "", e.db, e.rdb); err == nil || err.StatusCode != http.StatusNotFound {
+		t.Errorf("err = %+v, want 404", err)
+	}
+}
+
+func TestAddToCart_NotEnoughStock(t *testing.T) {
+	e := setup(t)
+	if _, _, err := AddToCart(add(e.hat.PublicId, 4), "", e.db, e.rdb); err == nil || err.StatusCode != http.StatusConflict {
+		t.Errorf("4 of 3: err = %+v, want 409", err)
+	}
+
+	// Adding in two steps must also respect stock.
+	sid, _, _ := AddToCart(add(e.hat.PublicId, 2), "", e.db, e.rdb)
+	if _, _, err := AddToCart(add(e.hat.PublicId, 2), sid, e.db, e.rdb); err == nil || err.StatusCode != http.StatusConflict {
+		t.Errorf("2+2 of 3: err = %+v, want 409", err)
+	}
+}
+
+func TestGetCart(t *testing.T) {
+	e := setup(t)
+
+	resp, err := GetCart("", e.rdb)
 	if err != nil || len(resp.Items) != 0 {
 		t.Fatalf("empty session: %+v %v", resp, err)
 	}
 
-	sid, _, _ := AddToCart(item("prod_1", 1), "", nil, rdb)
-	resp, _ = GetCart(sid, rdb)
+	sid, _, _ := AddToCart(add(e.bag.PublicId, 1), "", e.db, e.rdb)
+	resp, _ = GetCart(sid, e.rdb)
 	if len(resp.Items) != 1 {
 		t.Errorf("items = %+v", resp.Items)
 	}
 
-	resp, _ = GetCart("cart_doesnotexist", rdb)
+	resp, _ = GetCart("cart_doesnotexist", e.rdb)
 	if resp.Items == nil || len(resp.Items) != 0 {
 		t.Errorf("unknown session should return empty items, got %+v", resp.Items)
 	}
 }
 
 func TestUpdateCartItemQuantity(t *testing.T) {
-	_, rdb := newRedis(t)
-	sid, _, _ := AddToCart(item("prod_1", 1), "", nil, rdb)
+	e := setup(t)
+	sid, _, _ := AddToCart(add(e.bag.PublicId, 1), "", e.db, e.rdb)
 
-	resp, err := UpdateCartItemQuantity("prod_1", 7, sid, rdb)
+	resp, err := UpdateCartItemQuantity(e.bag.PublicId, 7, sid, e.db, e.rdb)
 	if err != nil || resp.Items[0].Quantity != 7 {
 		t.Fatalf("update: %+v %v", resp, err)
 	}
 
-	if _, err := UpdateCartItemQuantity("prod_missing", 1, sid, rdb); err == nil || err.StatusCode != http.StatusNotFound {
-		t.Errorf("missing item: err = %+v, want 404", err)
+	if _, err := UpdateCartItemQuantity(e.bag.PublicId, 11, sid, e.db, e.rdb); err == nil || err.StatusCode != http.StatusConflict {
+		t.Errorf("over stock: err = %+v, want 409", err)
 	}
-	if _, err := UpdateCartItemQuantity("prod_1", 1, "", rdb); err == nil || err.StatusCode != http.StatusNotFound {
+	if _, err := UpdateCartItemQuantity(e.hat.PublicId, 1, sid, e.db, e.rdb); err == nil || err.StatusCode != http.StatusNotFound {
+		t.Errorf("item not in cart: err = %+v, want 404", err)
+	}
+	if _, err := UpdateCartItemQuantity(e.bag.PublicId, 1, "", e.db, e.rdb); err == nil || err.StatusCode != http.StatusNotFound {
 		t.Errorf("no session: err = %+v, want 404", err)
 	}
 }
 
 func TestRemoveCartItem(t *testing.T) {
-	_, rdb := newRedis(t)
-	sid, _, _ := AddToCart(item("prod_1", 1), "", nil, rdb)
-	AddToCart(item("prod_2", 1), sid, nil, rdb)
+	e := setup(t)
+	sid, _, _ := AddToCart(add(e.bag.PublicId, 1), "", e.db, e.rdb)
+	AddToCart(add(e.hat.PublicId, 1), sid, e.db, e.rdb)
 
-	resp, err := RemoveCartItem("prod_1", sid, rdb)
-	if err != nil || len(resp.Items) != 1 || resp.Items[0].ProductId != "prod_2" {
+	resp, err := RemoveCartItem(e.bag.PublicId, sid, e.rdb)
+	if err != nil || len(resp.Items) != 1 || resp.Items[0].ProductId != e.hat.PublicId {
 		t.Fatalf("remove: %+v %v", resp, err)
 	}
 
-	resp, err = RemoveCartItem("prod_2", sid, rdb)
+	resp, err = RemoveCartItem(e.hat.PublicId, sid, e.rdb)
 	if err != nil || resp.Items == nil || len(resp.Items) != 0 {
 		t.Errorf("removing last item should leave empty (non-nil) list: %+v %v", resp, err)
 	}
 
-	if _, err := RemoveCartItem("prod_x", sid, rdb); err == nil || err.StatusCode != http.StatusNotFound {
+	if _, err := RemoveCartItem("prod_x", sid, e.rdb); err == nil || err.StatusCode != http.StatusNotFound {
 		t.Errorf("missing item: err = %+v, want 404", err)
 	}
 }
 
 func TestClearCart(t *testing.T) {
-	mr, rdb := newRedis(t)
-	sid, _, _ := AddToCart(item("prod_1", 1), "", nil, rdb)
+	e := setup(t)
+	sid, _, _ := AddToCart(add(e.bag.PublicId, 1), "", e.db, e.rdb)
 
-	if err := ClearCart(sid, rdb); err != nil {
+	if err := ClearCart(sid, e.rdb); err != nil {
 		t.Fatalf("ClearCart: %v", err.Err)
 	}
-	if mr.Exists("cart:" + sid) {
+	if e.mr.Exists("cart:" + sid) {
 		t.Error("cart still in redis after clear")
 	}
-	if err := ClearCart("", rdb); err != nil {
+	if err := ClearCart("", e.rdb); err != nil {
 		t.Errorf("clearing empty session should be a no-op: %v", err.Err)
-	}
-}
-
-// The cart stores whatever price the client sends, so a shopper can buy a
-// ₦15,000 bag for ₦1 once checkout reads totals from the cart.
-func TestAddToCart_PriceComesFromDatabase(t *testing.T) {
-	knownBug(t, "cart trusts client-supplied product price")
-	_, rdb := newRedis(t)
-	cheap := item("prod_1", 1)
-	cheap.Price = 1
-
-	_, resp, _ := AddToCart(cheap, "", nil, rdb)
-	if resp.Items[0].Price == 1 {
-		t.Error("cart accepted client-supplied price of 1")
 	}
 }

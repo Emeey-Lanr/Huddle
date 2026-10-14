@@ -119,6 +119,34 @@ func ValidateProductId(db *gorm.DB, rdb *redis.Client, publicId string)(*uuid.UU
    return &uuidInternalProductId, nil
 }
 
+// VerifyProductOwnership returns the internal product id when the product
+// belongs to a store owned by adminId, and 403 otherwise.
+func VerifyProductOwnership(db *gorm.DB, rdb *redis.Client, publicProductId, adminId string) (*uuid.UUID, *utility.AppError) {
+	adminUUID, err := utility.StringToUUID(adminId)
+	if err != nil {
+		return nil, &utility.AppError{StatusCode: http.StatusUnauthorized, Message: "Invalid admin id", Err: err}
+	}
+
+	internalProductId, helperErr := ValidateProductId(db, rdb, publicProductId)
+	if helperErr != nil {
+		return nil, helperErr
+	}
+
+	var count int64
+	err = db.Model(&model.Products{}).
+		Joins("JOIN stores ON stores.id = products.store_id").
+		Where("products.id = ? AND stores.admin_id = ?", *internalProductId, adminUUID).
+		Count(&count).Error
+	if err != nil {
+		return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err: err}
+	}
+	if count == 0 {
+		return nil, &utility.AppError{StatusCode: http.StatusForbidden, Message: "Ownership not verified", Err: errors.New("admin does not own this product")}
+	}
+
+	return internalProductId, nil
+}
+
 func GetAllProductQueryChain(db *gorm.DB, storeInternalId uuid.UUID, queryData model.ProductQuery)(*gorm.DB){
   query := db.Model(&model.Products{})
   

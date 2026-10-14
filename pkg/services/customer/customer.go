@@ -48,7 +48,7 @@ func Signup(db *gorm.DB, rdb *redis.Client, req model.CustomerSignupReq) (*strin
 		return nil, nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Could not create customer", Err: err}
 	}
 
-	token, err := utility.CreateToken(customerId, req.Email)
+	token, err := utility.CreateToken(customerId, req.Email, utility.RoleCustomer)
 	if err != nil {
 		return nil, nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Could not generate auth token", Err: err}
 	}
@@ -82,7 +82,7 @@ func Signin(db *gorm.DB, rdb *redis.Client, req model.CustomerSigninReq) (*strin
 		return nil, nil, &utility.AppError{StatusCode: http.StatusUnauthorized, Message: "Invalid credentials", Err: errors.New("invalid credentials")}
 	}
 
-	token, err := utility.CreateToken(customer.Id, customer.Email)
+	token, err := utility.CreateToken(customer.Id, customer.Email, utility.RoleCustomer)
 	if err != nil {
 		return nil, nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Could not generate auth token", Err: err}
 	}
