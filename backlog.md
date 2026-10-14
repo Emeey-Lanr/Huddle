@@ -6,6 +6,23 @@ Pick items top to bottom. Each item is done when its "Done when" line is true an
 
 Database tests use your local Postgres: a separate `huddle_test` database (never the dev `huddle` one), one throwaway schema per test, built from `db/migrations`. Set `TEST_DATABASE_URL` to point elsewhere. If Postgres is unreachable, those tests skip.
 
+## Where we are (updated 14 Oct 2026)
+
+- **Branch:** `feat/bachs-payments` (commit `543d589`, 4.6 done) is **not merged** into `main` yet. Next step: merge it, then start **4.6b**.
+- **Local dev DB** (`huddle`) is at migration **9**. Apply new migrations with `~/go/bin/migrate -path db/migrations -database "postgres://USER:PASS@localhost:5432/huddle?sslmode=disable" up` (values from `.env`; `.env` uses `KEY = value` with spaces).
+- **Bachs:** sandbox keys are not in `.env` yet. Needed: `BACHS_API_KEY`, `BACHS_WEBHOOK_SECRET` (optional `BACHS_BASE_URL`, `BACHS_PLATFORM_FEE_PERCENT`). Webhook must be registered with `event_source: all`.
+- **Decisions made:** guest checkout + optional customer account; delivery details = name, phone, pickup/delivery (+ address/city/state for delivery), optional email and note; stock hold 30 min; sellers can mark orders paid themselves (transfer/cash); **sellers collect** payments in their own Bachs sub-account (direct charges); platform fee 0 for now.
+
+## How we work
+
+- One feature branch per item, fast-forward merge into `main` when asked. Nothing is pushed to a remote.
+- **Never add Claude attribution** (no `Co-Authored-By`, no "Generated with") to commits or PRs.
+- Every API change updates `doc/swagger.json` (`swagger_test.go` enforces it) and is validated with `python -m openapi_spec_validator doc/swagger.json`.
+- New migrations: bump the table count / index list in `pkg/testutil/migrations_test.go`.
+- Prove important tests fail without the fix (back up the file to a scratch dir, break it, run, restore — don't use `git checkout` on uncommitted work).
+- Never print `.env` secrets. Bachs keys go in `.env`, never in chat.
+- `go vet ./...` can be slow on this machine; run it in the background.
+
 ---
 
 ## 1. Security fixes
@@ -77,7 +94,7 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
 
 - [ ] **3.3 Controller/route tests**
   HTTP-level tests for each route: auth required, wrong owner → 403, bad payload → 400.
-  Started: `pkg/router/http_helpers_test.go` runs the full router on Postgres; store routes covered. Add the other routes as they are touched.
+  Started: `pkg/router/http_helpers_test.go` runs the full router on Postgres. Covered: store, store key, storefront, cart, CORS, orders, payments/webhook. Still missing: admin signin, product routes (update/delete/images), customer signin/profile.
 
 - [x] **3.4 Keep Swagger in sync**
   `doc/swagger.json` is hand-written OpenAPI 3.0 (not generated), served at `/swagger/index.html`. Rewritten to match the code in Oct 2026. `pkg/router/swagger_test.go` fails if a route is added or removed without updating it, so update the file with every API change.
