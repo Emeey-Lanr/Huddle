@@ -19,6 +19,7 @@ type CartItem struct {
 
 type CartResponse struct {
 	SessionId string     `json:"session_id"`
+	StoreId   string     `json:"store_id"`
 	Items     []CartItem `json:"items"`
 }
 

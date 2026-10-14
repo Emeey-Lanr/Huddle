@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"huddle/pkg/helper"
 	"huddle/pkg/model"
 	"huddle/pkg/utility"
 	"net/http"
@@ -15,12 +16,52 @@ import (
 	"gorm.io/gorm"
 )
 
-// findSellableProduct loads an active product by its public id.
-func findSellableProduct(db *gorm.DB, publicProductId string) (*model.Products, *utility.AppError) {
+const cartTTL = 7 * 24 * time.Hour
+
+// Each store has its own cart inside a session, so one shopper visiting two
+// Huddle stores never mixes their products.
+func cartKey(sessionId, storePublicId string) string {
+	return fmt.Sprintf("cart:%s:%s", sessionId, storePublicId)
+}
+
+func loadItems(ctx context.Context, rdb *redis.Client, key string) ([]model.CartItem, *utility.AppError) {
+	items := []model.CartItem{}
+	val, err := rdb.Get(ctx, key).Result()
+	if errors.Is(err, redis.Nil) {
+		return items, nil
+	}
+	if err != nil {
+		return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Could not read cart", Err: err}
+	}
+	if err := json.Unmarshal([]byte(val), &items); err != nil {
+		return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Could not decode cart data", Err: err}
+	}
+	return items, nil
+}
+
+func saveItems(ctx context.Context, rdb *redis.Client, key string, items []model.CartItem) *utility.AppError {
+	bytes, err := json.Marshal(items)
+	if err != nil {
+		return &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Could not encode cart data", Err: err}
+	}
+	if err := rdb.Set(ctx, key, string(bytes), cartTTL).Err(); err != nil {
+		return &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Could not save cart", Err: err}
+	}
+	return nil
+}
+
+// findSellableProduct loads an active product that belongs to the given store.
+func findSellableProduct(db *gorm.DB, rdb *redis.Client, storePublicId, publicProductId string) (*model.Products, *utility.AppError) {
+	storeId, appErr := helper.GetInternalStoreId(rdb, db, storePublicId)
+	if appErr != nil {
+		return nil, appErr
+	}
+
 	var product model.Products
-	if err := db.Where("public_id = ? AND active = ?", publicProductId, true).First(&product).Error; err != nil {
+	err := db.Where("public_id = ? AND store_id = ? AND active = ?", publicProductId, *storeId, true).First(&product).Error
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, &utility.AppError{StatusCode: http.StatusNotFound, Message: "Product not found", Err: err}
+			return nil, &utility.AppError{StatusCode: http.StatusNotFound, Message: "Product not found in this store", Err: err}
 		}
 		return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err: err}
 	}
@@ -38,8 +79,12 @@ func checkStock(product *model.Products, quantity uint) *utility.AppError {
 	return nil
 }
 
-func AddToCart(req *model.AddCartItemRequest, sessionCookie string, db *gorm.DB, rdb *redis.Client) (string, *model.CartResponse, *utility.AppError) {
-	product, appErr := findSellableProduct(db, req.ProductId)
+func response(sessionId, storePublicId string, items []model.CartItem) *model.CartResponse {
+	return &model.CartResponse{SessionId: sessionId, StoreId: storePublicId, Items: items}
+}
+
+func AddToCart(req *model.AddCartItemRequest, storePublicId, sessionCookie string, db *gorm.DB, rdb *redis.Client) (string, *model.CartResponse, *utility.AppError) {
+	product, appErr := findSellableProduct(db, rdb, storePublicId, req.ProductId)
 	if appErr != nil {
 		return "", nil, appErr
 	}
@@ -49,13 +94,11 @@ func AddToCart(req *model.AddCartItemRequest, sessionCookie string, db *gorm.DB,
 		sessionId = fmt.Sprintf("cart_%s", strings.ReplaceAll(utility.GenerateUUID().String(), "-", ""))
 	}
 
-	redisKey := fmt.Sprintf("cart:%s", sessionId)
 	ctx := context.Background()
-
-	var items []model.CartItem
-	val, err := rdb.Get(ctx, redisKey).Result()
-	if err == nil && val != "" {
-		_ = json.Unmarshal([]byte(val), &items)
+	key := cartKey(sessionId, storePublicId)
+	items, appErr := loadItems(ctx, rdb, key)
+	if appErr != nil {
+		return "", nil, appErr
 	}
 
 	// Update existing product quantity or append new item; name and price
@@ -87,53 +130,31 @@ func AddToCart(req *model.AddCartItemRequest, sessionCookie string, db *gorm.DB,
 		items = append(items, item)
 	}
 
-	bytes, err := json.Marshal(items)
-	if err != nil {
-		return "", nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Could not encode cart data", Err: err}
+	if appErr := saveItems(ctx, rdb, key, items); appErr != nil {
+		return "", nil, appErr
 	}
 
-	if err := rdb.Set(ctx, redisKey, string(bytes), 7*24*time.Hour).Err(); err != nil {
-		return "", nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Could not save cart item to cache", Err: err}
-	}
-
-	response := &model.CartResponse{
-		SessionId: sessionId,
-		Items:     items,
-	}
-
-	return sessionId, response, nil
+	return sessionId, response(sessionId, storePublicId, items), nil
 }
 
-func GetCart(sessionCookie string, rdb *redis.Client) (*model.CartResponse, *utility.AppError) {
+func GetCart(storePublicId, sessionCookie string, rdb *redis.Client) (*model.CartResponse, *utility.AppError) {
 	if sessionCookie == "" {
-		return &model.CartResponse{SessionId: "", Items: []model.CartItem{}}, nil
+		return response("", storePublicId, []model.CartItem{}), nil
 	}
 
-	redisKey := fmt.Sprintf("cart:%s", sessionCookie)
-	ctx := context.Background()
-
-	var items []model.CartItem
-	val, err := rdb.Get(ctx, redisKey).Result()
-	if err == nil && val != "" {
-		_ = json.Unmarshal([]byte(val), &items)
+	items, appErr := loadItems(context.Background(), rdb, cartKey(sessionCookie, storePublicId))
+	if appErr != nil {
+		return nil, appErr
 	}
-
-	if items == nil {
-		items = []model.CartItem{}
-	}
-
-	return &model.CartResponse{
-		SessionId: sessionCookie,
-		Items:     items,
-	}, nil
+	return response(sessionCookie, storePublicId, items), nil
 }
 
-func UpdateCartItemQuantity(productId string, quantity uint, sessionCookie string, db *gorm.DB, rdb *redis.Client) (*model.CartResponse, *utility.AppError) {
+func UpdateCartItemQuantity(productId string, quantity uint, storePublicId, sessionCookie string, db *gorm.DB, rdb *redis.Client) (*model.CartResponse, *utility.AppError) {
 	if sessionCookie == "" {
 		return nil, &utility.AppError{StatusCode: http.StatusNotFound, Message: "Cart session not found"}
 	}
 
-	product, appErr := findSellableProduct(db, productId)
+	product, appErr := findSellableProduct(db, rdb, storePublicId, productId)
 	if appErr != nil {
 		return nil, appErr
 	}
@@ -141,17 +162,11 @@ func UpdateCartItemQuantity(productId string, quantity uint, sessionCookie strin
 		return nil, appErr
 	}
 
-	redisKey := fmt.Sprintf("cart:%s", sessionCookie)
 	ctx := context.Background()
-
-	val, err := rdb.Get(ctx, redisKey).Result()
-	if err != nil || val == "" {
-		return nil, &utility.AppError{StatusCode: http.StatusNotFound, Message: "Cart session not found or expired"}
-	}
-
-	var items []model.CartItem
-	if err := json.Unmarshal([]byte(val), &items); err != nil {
-		return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Could not decode cart data", Err: err}
+	key := cartKey(sessionCookie, storePublicId)
+	items, appErr := loadItems(ctx, rdb, key)
+	if appErr != nil {
+		return nil, appErr
 	}
 
 	found := false
@@ -170,40 +185,26 @@ func UpdateCartItemQuantity(productId string, quantity uint, sessionCookie strin
 		return nil, &utility.AppError{StatusCode: http.StatusNotFound, Message: "Item not found in shopping cart"}
 	}
 
-	bytes, err := json.Marshal(items)
-	if err != nil {
-		return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Could not encode cart data", Err: err}
+	if appErr := saveItems(ctx, rdb, key, items); appErr != nil {
+		return nil, appErr
 	}
 
-	if err := rdb.Set(ctx, redisKey, string(bytes), 7*24*time.Hour).Err(); err != nil {
-		return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Could not update cart in cache", Err: err}
-	}
-
-	return &model.CartResponse{
-		SessionId: sessionCookie,
-		Items:     items,
-	}, nil
+	return response(sessionCookie, storePublicId, items), nil
 }
 
-func RemoveCartItem(productId string, sessionCookie string, rdb *redis.Client) (*model.CartResponse, *utility.AppError) {
+func RemoveCartItem(productId, storePublicId, sessionCookie string, rdb *redis.Client) (*model.CartResponse, *utility.AppError) {
 	if sessionCookie == "" {
 		return nil, &utility.AppError{StatusCode: http.StatusNotFound, Message: "Cart session not found"}
 	}
 
-	redisKey := fmt.Sprintf("cart:%s", sessionCookie)
 	ctx := context.Background()
-
-	val, err := rdb.Get(ctx, redisKey).Result()
-	if err != nil || val == "" {
-		return nil, &utility.AppError{StatusCode: http.StatusNotFound, Message: "Cart session not found or expired"}
+	key := cartKey(sessionCookie, storePublicId)
+	items, appErr := loadItems(ctx, rdb, key)
+	if appErr != nil {
+		return nil, appErr
 	}
 
-	var items []model.CartItem
-	if err := json.Unmarshal([]byte(val), &items); err != nil {
-		return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Could not decode cart data", Err: err}
-	}
-
-	var updatedItems []model.CartItem
+	updatedItems := []model.CartItem{}
 	found := false
 	for _, item := range items {
 		if item.ProductId == productId {
@@ -217,34 +218,21 @@ func RemoveCartItem(productId string, sessionCookie string, rdb *redis.Client) (
 		return nil, &utility.AppError{StatusCode: http.StatusNotFound, Message: "Item not found in shopping cart"}
 	}
 
-	if updatedItems == nil {
-		updatedItems = []model.CartItem{}
+	if appErr := saveItems(ctx, rdb, key, updatedItems); appErr != nil {
+		return nil, appErr
 	}
 
-	bytes, err := json.Marshal(updatedItems)
-	if err != nil {
-		return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Could not encode cart data", Err: err}
-	}
-
-	if err := rdb.Set(ctx, redisKey, string(bytes), 7*24*time.Hour).Err(); err != nil {
-		return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Could not update cart in cache", Err: err}
-	}
-
-	return &model.CartResponse{
-		SessionId: sessionCookie,
-		Items:     updatedItems,
-	}, nil
+	return response(sessionCookie, storePublicId, updatedItems), nil
 }
 
-func ClearCart(sessionCookie string, rdb *redis.Client) *utility.AppError {
+// ClearCart empties this store's cart only; carts for other stores in the
+// same session are kept.
+func ClearCart(storePublicId, sessionCookie string, rdb *redis.Client) *utility.AppError {
 	if sessionCookie == "" {
 		return nil
 	}
 
-	redisKey := fmt.Sprintf("cart:%s", sessionCookie)
-	ctx := context.Background()
-
-	if err := rdb.Del(ctx, redisKey).Err(); err != nil {
+	if err := rdb.Del(context.Background(), cartKey(sessionCookie, storePublicId)).Err(); err != nil {
 		return &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Could not clear cart session", Err: err}
 	}
 

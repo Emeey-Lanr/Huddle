@@ -34,7 +34,7 @@ func (b *CartController) AddToCart(c *gin.Context) {
 
 	cookie, _ := c.Cookie("cart_session")
 
-	sessionId, cartResp, serviceErr := cart.AddToCart(&req, cookie, b.Db, b.Redis)
+	sessionId, cartResp, serviceErr := cart.AddToCart(&req, c.GetString("X-Store-Id"), cookie, b.Db, b.Redis)
 	if serviceErr != nil {
 		response.Error(c, serviceErr.StatusCode, serviceErr.Message, serviceErr.Err)
 		return
@@ -49,7 +49,7 @@ func (b *CartController) AddToCart(c *gin.Context) {
 func (b *CartController) GetCart(c *gin.Context) {
 	cookie, _ := c.Cookie("cart_session")
 
-	cartResp, serviceErr := cart.GetCart(cookie, b.Redis)
+	cartResp, serviceErr := cart.GetCart(c.GetString("X-Store-Id"), cookie, b.Redis)
 	if serviceErr != nil {
 		response.Error(c, serviceErr.StatusCode, serviceErr.Message, serviceErr.Err)
 		return
@@ -80,7 +80,7 @@ func (b *CartController) UpdateCartItem(c *gin.Context) {
 
 	cookie, _ := c.Cookie("cart_session")
 
-	cartResp, serviceErr := cart.UpdateCartItemQuantity(productId, req.Quantity, cookie, b.Db, b.Redis)
+	cartResp, serviceErr := cart.UpdateCartItemQuantity(productId, req.Quantity, c.GetString("X-Store-Id"), cookie, b.Db, b.Redis)
 	if serviceErr != nil {
 		response.Error(c, serviceErr.StatusCode, serviceErr.Message, serviceErr.Err)
 		return
@@ -98,7 +98,7 @@ func (b *CartController) RemoveCartItem(c *gin.Context) {
 
 	cookie, _ := c.Cookie("cart_session")
 
-	cartResp, serviceErr := cart.RemoveCartItem(productId, cookie, b.Redis)
+	cartResp, serviceErr := cart.RemoveCartItem(productId, c.GetString("X-Store-Id"), cookie, b.Redis)
 	if serviceErr != nil {
 		response.Error(c, serviceErr.StatusCode, serviceErr.Message, serviceErr.Err)
 		return
@@ -110,14 +110,11 @@ func (b *CartController) RemoveCartItem(c *gin.Context) {
 func (b *CartController) ClearCart(c *gin.Context) {
 	cookie, _ := c.Cookie("cart_session")
 
-	serviceErr := cart.ClearCart(cookie, b.Redis)
+	serviceErr := cart.ClearCart(c.GetString("X-Store-Id"), cookie, b.Redis)
 	if serviceErr != nil {
 		response.Error(c, serviceErr.StatusCode, serviceErr.Message, serviceErr.Err)
 		return
 	}
-
-	// Expire session cookie
-	c.SetCookie("cart_session", "", -1, "/", "", false, true)
 
 	response.Success(c, "Shopping cart cleared successfully", nil)
 }

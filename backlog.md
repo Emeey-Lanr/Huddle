@@ -49,7 +49,7 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
   Unknown product returns 401 (`ValidateProductId`) or 500 "User Not Found" (`GetAProduct`); duplicate product returns 401.
   Done when: not found → 404, duplicate → 409.
 
-- [ ] **2.5 Cart scoped to a store**
+- [x] **2.5 Cart scoped to a store**
   A cart can mix products from different stores.
   Done when: each cart belongs to one store and rejects other stores' products.
 
@@ -78,7 +78,7 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
   HTTP-level tests for each route: auth required, wrong owner → 403, bad payload → 400.
 
 - [ ] **3.4 Keep Swagger in sync**
-  `doc/swagger.json` is missing `/cart/items/{id}`, and `POST /cart` now takes only `product_id` + `quantity`. Customer profile needs a customer token. Regenerate with `swag init` on each change (or check in CI).
+  `doc/swagger.json` is missing `/cart/items/{id}`, and `POST /cart` now takes only `product_id` + `quantity`. All `/cart` routes need an `X-Store-Id` header. `GET /product/products` returns `{items, page, limit, total}`. Customer profile needs a customer token. Regenerate with `swag init` on each change (or check in CI).
 
 ---
 
