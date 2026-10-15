@@ -549,6 +549,76 @@
             "description": "The checkout closes before the order's stock hold ends"
           }
         }
+      },
+      "CapabilityStatus": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "ngn_card_collection"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "restricted",
+              "pending",
+              "unrequested",
+              "unsupported"
+            ],
+            "example": "active"
+          },
+          "message": {
+            "type": "string",
+            "description": "Why the capability is not active, from Bachs. Show it to the seller.",
+            "example": "Upload a valid ID to start accepting cards."
+          }
+        }
+      },
+      "PaymentSetup": {
+        "type": "object",
+        "properties": {
+          "connected": {
+            "type": "boolean",
+            "description": "The store has a Bachs account",
+            "example": true
+          },
+          "ready": {
+            "type": "boolean",
+            "description": "Shoppers can pay the store online (NGN cards or bank transfer is active)",
+            "example": true
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CapabilityStatus"
+            }
+          },
+          "outstanding": {
+            "type": "array",
+            "description": "Details Bachs still needs from the seller",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "representative.id_document"
+            ]
+          }
+        }
+      },
+      "OnboardingLink": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "example": "https://connect.bachs.io/onboarding/alt_9fK2"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
       }
     },
     "responses": {
@@ -2973,7 +3043,7 @@
           "Payments"
         ],
         "summary": "Bachs webhook receiver",
-        "description": "Called by Bachs, not by storefronts. Register this URL as a Bachs webhook endpoint with `event_source: all` so events from sellers' sub-accounts arrive too.\n\nEvery delivery must carry a valid `X-Bachs-Signature-V2` (or `X-Bachs-Timestamp` + `X-Bachs-Signature`) made with `BACHS_WEBHOOK_SECRET`, no older than 5 minutes. Each event id is handled once.\n\nHandled events: `checkout.completed` (with `payment_status: paid`) and `collection.succeeded` mark the order paid, after checking amount, currency and seller account; a mismatch is held for review. `checkout.expired` closes the checkout. A payment for an order that expired is applied if the stock is still there, otherwise it is flagged for refund. Other events are acknowledged and ignored.",
+        "description": "Called by Bachs, not by storefronts. Register this URL as two Bachs webhook endpoints, one for **Account events** and one for **Connected account events** (sellers' sub-accounts), since an endpoint listens to one source. Set `BACHS_WEBHOOK_SECRET` to both signing secrets, comma-separated.\n\nEvery delivery must carry a valid `X-Bachs-Signature-V2` (or `X-Bachs-Timestamp` + `X-Bachs-Signature`) made with one of the `BACHS_WEBHOOK_SECRET` secrets, no older than 5 minutes. Each event id is handled once.\n\nHandled events: `checkout.completed` (with `payment_status: paid`) and `collection.succeeded` mark the order paid, after checking amount, currency and seller account; a mismatch is held for review. `checkout.expired` closes the checkout. `capability.updated` records whether a seller's account can take payments (see `GET /store/{id}/payments`). A payment for an order that expired is applied if the stock is still there, otherwise it is flagged for refund. Other events are acknowledged and ignored.",
         "security": [],
         "requestBody": {
           "required": true,
@@ -3028,6 +3098,173 @@
           },
           "503": {
             "description": "BACHS_WEBHOOK_SECRET is not set; Bachs retries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/store/{id}/payments": {
+      "get": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Can the store take online payments?",
+        "description": "Reads the store's Bachs account and returns whether shoppers can pay online (`ready`), the status of each capability and what Bachs still needs from the seller. Use it on the seller's return from onboarding: the return itself does not mean onboarding succeeded. If Bachs can't be reached, the last known statuses are returned.",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StoreIdPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Payment setup retrieved"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PaymentSetup"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/store/{id}/payments/onboarding": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Set up online payments with Bachs",
+        "description": "Creates the store's Bachs account if it has none, then returns a single-use link to Bachs' hosted onboarding. Send the seller there straight away: each call replaces the previous link, and links expire.\n\nBachs sends the seller to `return_url` when they finish or leave; then check `GET /store/{id}/payments`. An expired or used link leads to `refresh_url`, which should call this endpoint again for a fresh link. Once the store is ready, the link lets the seller update their details instead.\n\nThe seller's money lands in this account's balance. In production a store can't take online payments until `ready` is true.",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StoreIdPath"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "return_url",
+                  "refresh_url"
+                ],
+                "properties": {
+                  "return_url": {
+                    "type": "string",
+                    "format": "uri",
+                    "example": "https://huddle.ng/dashboard/payments",
+                    "description": "Full http(s) link"
+                  },
+                  "refresh_url": {
+                    "type": "string",
+                    "format": "uri",
+                    "example": "https://huddle.ng/dashboard/payments/retry",
+                    "description": "Full http(s) link"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Open the link to set up payments"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/OnboardingLink"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Nothing to update, or Bachs has suspended or rejected the account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bachs refused the request (its reason is in the message) or could not be reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Bachs is not configured on this server",
             "content": {
               "application/json": {
                 "schema": {

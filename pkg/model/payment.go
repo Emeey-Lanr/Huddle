@@ -54,3 +54,41 @@ type PaymentResponse struct {
 	Currency    string          `json:"currency"`
 	ExpiresAt   time.Time       `json:"expires_at"`
 }
+
+// BachsCapabilities is the last known status of a seller account's capability.
+type BachsCapabilities struct {
+	AccountId string `gorm:"primaryKey"`
+	Name      string `gorm:"primaryKey"`
+	Status    string
+	ChangedAt time.Time
+}
+
+// OnboardingRequest says where Bachs sends the seller after onboarding
+// (return_url) and where an expired or used link leads (refresh_url, which
+// should ask Huddle for a new link).
+type OnboardingRequest struct {
+	ReturnURL  string `json:"return_url" validate:"required,http_url"`
+	RefreshURL string `json:"refresh_url" validate:"required,http_url"`
+}
+
+type OnboardingLink struct {
+	URL       string    `json:"url"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// PaymentSetup tells a seller whether their store can take online payments.
+type PaymentSetup struct {
+	// Connected is true once the store has a Bachs account.
+	Connected bool `json:"connected"`
+	// Ready is true when shoppers can pay the store online.
+	Ready        bool               `json:"ready"`
+	Capabilities []CapabilityStatus `json:"capabilities"`
+	// Outstanding lists details Bachs still needs from the seller.
+	Outstanding []string `json:"outstanding"`
+}
+
+type CapabilityStatus struct {
+	Name    string `json:"name"`
+	Status  string `json:"status"`
+	Message string `json:"message,omitempty"`
+}

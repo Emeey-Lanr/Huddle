@@ -88,42 +88,59 @@ func (e *APIError) Error() string {
 // X-Account-Id, making it a direct charge: the sale lands in that seller's
 // Bachs balance. idempotencyKey makes retries of the same request safe.
 func (c *Client) CreateCheckout(ctx context.Context, accountId, idempotencyKey string, req CheckoutRequest) (*Checkout, error) {
-	body, err := json.Marshal(req)
-	if err != nil {
+	var checkout Checkout
+	if err := c.do(ctx, http.MethodPost, "/v1/checkout-sessions", accountId, idempotencyKey, req, &checkout); err != nil {
 		return nil, err
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/v1/checkout-sessions", bytes.NewReader(body))
+	if checkout.CheckoutId == "" || checkout.CheckoutURL == "" {
+		return nil, errors.New("bachs: checkout response has no checkout_id or checkout_url")
+	}
+	return &checkout, nil
+}
+
+// do sends a request and decodes a successful response into out. Error
+// responses become *APIError. in may be nil for requests without a body.
+func (c *Client) do(ctx context.Context, method, path, accountId, idempotencyKey string, in, out any) error {
+	var body io.Reader
+	if in != nil {
+		data, err := json.Marshal(in)
+		if err != nil {
+			return err
+		}
+		body = bytes.NewReader(data)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, method, c.BaseURL+path, body)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	httpReq.Header.Set("Authorization", "Bearer "+c.APIKey)
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Idempotency-Key", idempotencyKey)
+	if in != nil {
+		httpReq.Header.Set("Content-Type", "application/json")
+	}
+	if idempotencyKey != "" {
+		httpReq.Header.Set("Idempotency-Key", idempotencyKey)
+	}
 	if accountId != "" {
 		httpReq.Header.Set("X-Account-Id", accountId)
 	}
 
 	resp, err := c.HTTP.Do(httpReq)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if resp.StatusCode >= 300 {
 		apiErr := &APIError{StatusCode: resp.StatusCode}
 		json.Unmarshal(data, apiErr)
-		return nil, apiErr
+		return apiErr
 	}
-	var checkout Checkout
-	if err := json.Unmarshal(data, &checkout); err != nil {
-		return nil, fmt.Errorf("bachs: decode checkout: %w", err)
+	if err := json.Unmarshal(data, out); err != nil {
+		return fmt.Errorf("bachs: decode %s %s: %w", method, path, err)
 	}
-	if checkout.CheckoutId == "" || checkout.CheckoutURL == "" {
-		return nil, errors.New("bachs: checkout response has no checkout_id or checkout_url")
-	}
-	return &checkout, nil
+	return nil
 }

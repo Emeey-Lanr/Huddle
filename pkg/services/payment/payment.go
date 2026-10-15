@@ -85,9 +85,18 @@ func StartPayment(db *gorm.DB, client *bachs.Client, storeId uuid.UUID, publicOr
 		accountId = *store.BachsAccountId
 	}
 	// Outside production a store without a sub-account is charged to the
-	// platform account, so payments can be tried in the sandbox.
-	if accountId == "" && os.Getenv("APP_ENV") == "production" {
-		return nil, appErr(http.StatusConflict, "This store can't take online payments yet", errors.New("store has no Bachs account"))
+	// platform account, so payments can be tried in the sandbox. In
+	// production the seller must have finished Bachs onboarding.
+	if os.Getenv("APP_ENV") == "production" {
+		ready := false
+		if accountId != "" {
+			if ready, err = Ready(db, accountId); err != nil {
+				return nil, appErr(http.StatusInternalServerError, "Internal Server Error", err)
+			}
+		}
+		if !ready {
+			return nil, appErr(http.StatusConflict, "This store can't take online payments yet", errors.New("store's Bachs account cannot collect"))
+		}
 	}
 
 	publicId := "pay_" + strings.ReplaceAll(utility.GenerateUUID().String(), "-", "")
@@ -161,12 +170,30 @@ func HandleEvent(db *gorm.DB, e *bachs.Event, now time.Time) error {
 			return paid(tx, e, now)
 		case "collection.succeeded":
 			return paid(tx, e, now)
+		case "capability.updated":
+			return capabilityUpdated(tx, e, now)
 		case "checkout.expired":
 			return tx.Model(&model.Payments{}).Where("checkout_id = ? AND status = ?", e.Data.CheckoutId, model.PaymentOpen).
 				Updates(map[string]any{"status": model.PaymentExpired, "updated_at": now}).Error
 		}
 		return nil
 	})
+}
+
+// capabilityUpdated saves a seller account's new capability status.
+func capabilityUpdated(tx *gorm.DB, e *bachs.Event, now time.Time) error {
+	account := e.Data.Account
+	if account == "" {
+		account = e.SourceAccount()
+	}
+	if account == "" || e.Data.Capability == "" || e.Data.Status == "" {
+		return nil
+	}
+	changedAt := e.CreatedAt
+	if changedAt.IsZero() {
+		changedAt = now
+	}
+	return saveCapability(tx, account, e.Data.Capability, e.Data.Status, changedAt)
 }
 
 // paid records a successful payment. Bachs sends both checkout.completed and

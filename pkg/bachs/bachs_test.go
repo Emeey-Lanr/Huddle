@@ -131,3 +131,40 @@ func TestParseEvent_IgnoresUnknownFields(t *testing.T) {
 		t.Error("event without id accepted")
 	}
 }
+
+func TestCapabilities_AllShapes(t *testing.T) {
+	for name, body := range map[string]string{
+		"keyed by name": `{"ngn_card_collection":{"status":"active","requested":true}}`,
+		"list":          `[{"name":"ngn_card_collection","status":"active","requested":true}]`,
+		"wrapped list":  `{"data":[{"name":"ngn_card_collection","status":"active","requested":true}]}`,
+	} {
+		var caps Capabilities
+		if err := json.Unmarshal([]byte(body), &caps); err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		if len(caps) != 1 || caps[0].Name != "ngn_card_collection" || caps[0].Status != CapabilityActive || !caps[0].Requested {
+			t.Errorf("%s: %+v", name, caps)
+		}
+	}
+}
+
+func TestVerifyAny_EitherEndpointSecret(t *testing.T) {
+	body := []byte(`{"id":"evt_1","type":"capability.updated"}`)
+	now := time.Unix(1700000000, 0)
+	secrets := WebhookSecrets(" whsec_account , whsec_connect,")
+	if len(secrets) != 2 {
+		t.Fatalf("secrets = %q, want 2", secrets)
+	}
+	for _, s := range []string{"whsec_account", "whsec_connect"} {
+		if err := VerifyAny(headersV2(s, now.Unix(), body), body, secrets, now); err != nil {
+			t.Errorf("signed with %s: %v", s, err)
+		}
+	}
+	if err := VerifyAny(headersV2("whsec_other", now.Unix(), body), body, secrets, now); err == nil {
+		t.Error("signed with an unknown secret was accepted")
+	}
+	if err := VerifyAny(headersV2("whsec_account", now.Unix(), body), body, nil, now); err == nil {
+		t.Error("no secrets configured was accepted")
+	}
+}

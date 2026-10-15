@@ -71,6 +71,33 @@ func VerifySignature(header http.Header, body []byte, secret string, now time.Ti
 	return ErrBadSignature
 }
 
+// WebhookSecrets splits BACHS_WEBHOOK_SECRET. Bachs endpoints listen to one
+// event source each (the platform's own account, or connected accounts), so
+// Huddle has two endpoints with the same URL and a secret for each, given
+// comma-separated.
+func WebhookSecrets(value string) []string {
+	var secrets []string
+	for _, s := range strings.Split(value, ",") {
+		if s = strings.TrimSpace(s); s != "" {
+			secrets = append(secrets, s)
+		}
+	}
+	return secrets
+}
+
+// VerifyAny accepts a delivery signed with any of the secrets.
+func VerifyAny(header http.Header, body []byte, secrets []string, now time.Time) error {
+	if len(secrets) == 0 {
+		return errors.New("BACHS_WEBHOOK_SECRET is not set")
+	}
+	for _, secret := range secrets {
+		if err := VerifySignature(header, body, secret, now); err == nil {
+			return nil
+		}
+	}
+	return ErrBadSignature
+}
+
 // Event is the webhook envelope. Fields Huddle does not use are ignored, as
 // Bachs asks, since new fields may be added at any time.
 type Event struct {
@@ -90,6 +117,18 @@ type EventData struct {
 	PaymentStatus string `json:"payment_status"`
 	Amount        string `json:"amount"`
 	Currency      string `json:"currency"`
+	// Set on capability.updated.
+	Account    string `json:"account"`
+	Capability string `json:"capability"`
+}
+
+// SourceAccount is the account an event happened on: "account" when set,
+// otherwise organization_id, as the Bachs docs say to read it.
+func (e *Event) SourceAccount() string {
+	if e.Account != "" {
+		return e.Account
+	}
+	return e.OrganizationId
 }
 
 func ParseEvent(body []byte) (*Event, error) {
