@@ -8,10 +8,10 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
 
 ## Where we are (updated 21 Oct 2026)
 
-- **Branch:** `feat/bachs-payment-followups` has 4.6c (incl. partial refunds), **not committed yet**. `main` has 4.6b. Next:
-  1. ~~Run `go test ./...` and `go vet ./...`~~ both pass with partial refunds (16 Oct).
+- **Branch:** `feat/bachs-payment-followups` has 4.6c (incl. partial refunds), committed (`5721bf0`) and pushed to `origin` on 21 Oct. Local `main` has 4.6b. Next:
+  1. ~~Run `go test ./...` and `go vet ./...`~~ both pass with partial refunds (16 Oct; `go test` again 21 Oct).
   2. Finish the sandbox refund test (below). Not started yet: on 20 Oct Claude Code tried to start the API and ngrok itself, but the machine ran out of memory (even small commands timed out) and everything was stopped. Start both in your own terminals, then give Claude the ngrok address.
-  3. Commit, merge into `main`, then start **4.7**.
+  3. Merge into `main`, then start **4.7**. `origin/main` has 2 README commits (`08b80b6`, `62de7b2`) that local `main` doesn't, so merge `origin/main` in before pushing `main`.
 - **Sandbox refund test, in progress.** Test store `str-e5564c2ac9824cbdaeb4f0de579d0357` (seller `sandbox1792093898`, password `secret123`, Bachs account `acct_EPpm2BjrPWW263rN`). Its order `ord_fe532f63baea4c23a4da1cf447c25dde` is paid (₦15,000, charge id saved). Bachs kept a 2% fee, so the seller's balance is ₦14,700 and a full refund returns 409 with that balance (checked against the real sandbox ✔). Still to prove: the successful refund. Place and pay one more ₦15,000 order for this store (the earlier second order expired unpaid), so the balance is ₦29,400, then refund `ord_fe53…`'s payment in full and check that `refund.paid` arrives, the payment turns `refunded`, the order `cancelled` and the stock comes back. To get a store key for a new order, call `POST /store/{id}/key` as the seller.
 - **Running locally:** start the API (`go run .`, port 8080) and `ngrok http 8080` in **your own terminals**. Claude Code stops background processes when the machine is low on memory (it happened 3 times). The ngrok address has stayed `https://outward-finally-elite.ngrok-free.dev`; if it changes, update both Bachs webhook endpoints. Shoppers pay on the Bachs checkout page by hand, because the Chrome extension has no access to `sandbox-checkout.bachs.io`. Sandbox card: any number except Bachs' decline cards (`4000 0000 0000 0002/9995/0069/0119`), or bank transfer with the page's test controls.
 - **Local dev DB** (`huddle`) is at migration **11**. Apply new migrations with `~/go/bin/migrate -path db/migrations -database "postgres://USER:PASS@localhost:5432/huddle?sslmode=disable" up` (values from `.env`; `.env` uses `KEY = value` with spaces). **Never roll back and re-apply a migration on the dev DB to change it once it holds data**: that wiped saved charge ids on 15 Oct (recovered from ngrok's request log). Add a new migration instead, unless the migration is uncommitted and the data doesn't matter.
@@ -21,7 +21,7 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
 
 ## How we work
 
-- One feature branch per item, fast-forward merge into `main` when asked. Nothing is pushed to a remote.
+- One feature branch per item, fast-forward merge into `main` when asked. Push to `origin` (GitHub) only when asked.
 - **Never add Claude attribution** (no `Co-Authored-By`, no "Generated with") to commits or PRs.
 - Every API change updates `doc/swagger.json` (`swagger_test.go` enforces it) and is validated with `python -m openapi_spec_validator doc/swagger.json`.
 - New migrations: bump the table count / index list in `pkg/testutil/migrations_test.go`.
