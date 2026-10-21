@@ -134,3 +134,56 @@ func (b *PaymentController) Setup(c *gin.Context) {
 	}
 	response.Success(c, "Payment setup retrieved", setup)
 }
+
+// Issues lists the store's payments that need a refund or a review.
+func (b *PaymentController) Issues(c *gin.Context) {
+	adminId, ok := adminUUID(c)
+	if !ok {
+		return
+	}
+	store, serviceErr := services.OwnedStore(b.Db, c.Param("id"), adminId)
+	if serviceErr != nil {
+		response.Error(c, serviceErr.StatusCode, serviceErr.Message, serviceErr.Err)
+		return
+	}
+	issues, serviceErr := payment.Issues(b.Db, store.ID)
+	if serviceErr != nil {
+		response.Error(c, serviceErr.StatusCode, serviceErr.Message, serviceErr.Err)
+		return
+	}
+	response.Success(c, "Payments that need attention", issues)
+}
+
+// Refund gives a payment's money back to the shopper. Owner only.
+func (b *PaymentController) Refund(c *gin.Context) {
+	adminId, ok := adminUUID(c)
+	if !ok {
+		return
+	}
+	storeId, paymentId := c.Param("id"), c.Param("paymentId")
+	var req model.RefundRequest
+	if c.Request.ContentLength != 0 {
+		if err := c.ShouldBindJSON(&req); err != nil {
+			response.Error(c, http.StatusBadRequest, "Invalid request payload", err)
+			return
+		}
+	}
+	if err := utility.Validate.Struct(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, "Validation failed", utility.ValidationErrors(err))
+		return
+	}
+
+	store, serviceErr := services.OwnedStore(b.Db, storeId, adminId)
+	if serviceErr != nil {
+		response.Error(c, serviceErr.StatusCode, serviceErr.Message, serviceErr.Err)
+		return
+	}
+	refund, serviceErr := payment.Refund(b.Db, b.Bachs, store.ID, paymentId, req)
+	if serviceErr != nil {
+		audit.LogEvent(c.Request.Context(), "PAYMENT_REFUND", adminId.String(), paymentId, "FAILED", map[string]interface{}{"error": serviceErr.Message})
+		response.Error(c, serviceErr.StatusCode, serviceErr.Message, serviceErr.Err)
+		return
+	}
+	audit.LogEvent(c.Request.Context(), "PAYMENT_REFUND", adminId.String(), paymentId, "SUCCESS", map[string]interface{}{"refund_id": refund.RefundId, "status": refund.Status})
+	response.Success(c, "Refund requested", refund)
+}

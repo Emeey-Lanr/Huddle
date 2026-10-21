@@ -120,6 +120,27 @@ type EventData struct {
 	// Set on capability.updated.
 	Account    string `json:"account"`
 	Capability string `json:"capability"`
+	// The charge behind a payment: charge_id on collection.succeeded and
+	// refund events, charge.id on checkout.completed.
+	ChargeId string       `json:"charge_id"`
+	Charge   *EventCharge `json:"charge"`
+	// Set on refund events; Reference is then the refund's reference.
+	RefundId string `json:"refund_id"`
+}
+
+type EventCharge struct {
+	Id string `json:"id"`
+}
+
+// ChargeID returns the event's charge id, or "".
+func (d EventData) ChargeID() string {
+	if d.ChargeId != "" {
+		return d.ChargeId
+	}
+	if d.Charge != nil {
+		return d.Charge.Id
+	}
+	return ""
 }
 
 // SourceAccount is the account an event happened on: "account" when set,

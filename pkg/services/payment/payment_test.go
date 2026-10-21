@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -33,6 +34,8 @@ type fakeRequest struct {
 }
 
 func (f *fakeBachs) client(t *testing.T) *bachs.Client {
+	// Checkout ids are unique per fake, as several fakes may share a database.
+	prefix := strconv.FormatInt(time.Now().UnixNano(), 36)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body bachs.CheckoutRequest
 		json.NewDecoder(r.Body).Decode(&body)
@@ -47,7 +50,7 @@ func (f *fakeBachs) client(t *testing.T) *bachs.Client {
 		}
 		w.WriteHeader(http.StatusCreated)
 		expires := time.Now().UTC().Add(time.Duration(body.ExpiresInMinutes) * time.Minute).Format(time.RFC3339)
-		fmt.Fprintf(w, `{"checkout_id":"chk_%d","checkout_url":"https://checkout.bachs.io/chk_%d","status":"open","expires_at":%q,"reference":%q}`, n, n, expires, body.Reference)
+		fmt.Fprintf(w, `{"checkout_id":"chk_%s%d","checkout_url":"https://checkout.bachs.io/chk_%s%d","status":"open","expires_at":%q,"reference":%q}`, prefix, n, prefix, n, expires, body.Reference)
 	}))
 	t.Cleanup(srv.Close)
 	return &bachs.Client{BaseURL: srv.URL, APIKey: "sk_sandbox_test", HTTP: srv.Client()}

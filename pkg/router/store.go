@@ -25,6 +25,8 @@ func StoreRouter(r *gin.Engine, db *gorm.DB, rdb *redis.Client){
 		storeRoutes.POST("/:id/key", storeBase.RegenerateKey)
 		storeRoutes.GET("/:id/payments", payments.Setup)
 		storeRoutes.POST("/:id/payments/onboarding", payments.Onboard)
+		storeRoutes.GET("/:id/payments/issues", payments.Issues)
+		storeRoutes.POST("/:id/payments/:paymentId/refund", payments.Refund)
 		storeRoutes.GET("/:id/orders", orders.SellerOrders)
 		storeRoutes.GET("/:id/orders/:orderId", orders.SellerOrder)
 		storeRoutes.PATCH("/:id/orders/:orderId", orders.UpdateStatus)

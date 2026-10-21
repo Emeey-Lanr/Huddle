@@ -170,6 +170,8 @@ func HandleEvent(db *gorm.DB, e *bachs.Event, now time.Time) error {
 			return paid(tx, e, now)
 		case "collection.succeeded":
 			return paid(tx, e, now)
+		case "refund.created", "refund.paid", "refund.failed":
+			return refundEvent(tx, e, now)
 		case "capability.updated":
 			return capabilityUpdated(tx, e, now)
 		case "checkout.expired":
@@ -210,6 +212,12 @@ func paid(tx *gorm.DB, e *bachs.Event, now time.Time) error {
 	}
 	if err != nil {
 		return err
+	}
+	// Both payment events carry the charge, which refunds need.
+	if charge := e.Data.ChargeID(); charge != "" && p.ChargeId == nil {
+		if err := tx.Model(&model.Payments{}).Where("id = ?", p.Id).Update("charge_id", charge).Error; err != nil {
+			return err
+		}
 	}
 	if p.Status != model.PaymentOpen && p.Status != model.PaymentExpired {
 		return nil

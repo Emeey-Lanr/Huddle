@@ -447,6 +447,14 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "payment": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/OrderPayment"
+              }
+            ],
+            "description": "Seller views only (`/store/{id}/orders`); absent when the order has no online payment."
           }
         }
       },
@@ -617,6 +625,120 @@
           "expires_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "OrderPayment": {
+        "type": "object",
+        "description": "The payment behind an order: the one that took money if any, otherwise the latest checkout.",
+        "properties": {
+          "payment_id": {
+            "type": "string",
+            "example": "pay_1c9e7d2b4a6f4e8d9c0b1a2f3e4d5c6b"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "paid",
+              "expired",
+              "needs_refund",
+              "review",
+              "refunded"
+            ],
+            "example": "paid",
+            "description": "`needs_refund`: money arrived for an order that could no longer take it. `review`: the amount, currency or account did not match the order."
+          },
+          "amount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "currency": {
+            "type": "string",
+            "example": "NGN"
+          },
+          "paid_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "refund_status": {
+            "type": "string",
+            "enum": [
+              "processing",
+              "paid",
+              "failed"
+            ],
+            "description": "Status of the latest refund, if any"
+          }
+        }
+      },
+      "PaymentIssue": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/OrderPayment"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "order_id": {
+                "type": "string",
+                "example": "ord_8c1f0e2d9b7a4c6e8f1a2b3c4d5e6f70"
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        ]
+      },
+      "Refund": {
+        "type": "object",
+        "properties": {
+          "refund_id": {
+            "type": "string",
+            "example": "rfd_5b2e8c1d9a7f4e3b8c6d1a0f2e4b7c9d"
+          },
+          "payment_id": {
+            "type": "string",
+            "example": "pay_1c9e7d2b4a6f4e8d9c0b1a2f3e4d5c6b"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "processing",
+              "paid",
+              "failed"
+            ],
+            "description": "`paid`: the money has gone back to the shopper."
+          },
+          "amount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "currency": {
+            "type": "string",
+            "example": "NGN"
+          },
+          "reason": {
+            "type": "string",
+            "example": "Out of stock"
+          },
+          "failure_reason": {
+            "type": "string",
+            "example": "Insufficient balance to refund"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completed_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "cancel_order": {
+            "type": "boolean",
+            "description": "The order is cancelled when this refund is paid"
           }
         }
       }
@@ -3043,7 +3165,7 @@
           "Payments"
         ],
         "summary": "Bachs webhook receiver",
-        "description": "Called by Bachs, not by storefronts. Register this URL as two Bachs webhook endpoints, one for **Account events** and one for **Connected account events** (sellers' sub-accounts), since an endpoint listens to one source. Set `BACHS_WEBHOOK_SECRET` to both signing secrets, comma-separated.\n\nEvery delivery must carry a valid `X-Bachs-Signature-V2` (or `X-Bachs-Timestamp` + `X-Bachs-Signature`) made with one of the `BACHS_WEBHOOK_SECRET` secrets, no older than 5 minutes. Each event id is handled once.\n\nHandled events: `checkout.completed` (with `payment_status: paid`) and `collection.succeeded` mark the order paid, after checking amount, currency and seller account; a mismatch is held for review. `checkout.expired` closes the checkout. `capability.updated` records whether a seller's account can take payments (see `GET /store/{id}/payments`). A payment for an order that expired is applied if the stock is still there, otherwise it is flagged for refund. Other events are acknowledged and ignored.",
+        "description": "Called by Bachs, not by storefronts. Register this URL as two Bachs webhook endpoints, one for **Account events** and one for **Connected account events** (sellers' sub-accounts), since an endpoint listens to one source. Set `BACHS_WEBHOOK_SECRET` to both signing secrets, comma-separated.\n\nEvery delivery must carry a valid `X-Bachs-Signature-V2` (or `X-Bachs-Timestamp` + `X-Bachs-Signature`) made with one of the `BACHS_WEBHOOK_SECRET` secrets, no older than 5 minutes. Each event id is handled once.\n\nHandled events: `checkout.completed` (with `payment_status: paid`) and `collection.succeeded` mark the order paid, after checking amount, currency and seller account; a mismatch is held for review. `checkout.expired` closes the checkout. `refund.created`, `refund.paid` and `refund.failed` settle refunds. `capability.updated` records whether a seller's account can take payments (see `GET /store/{id}/payments`). A payment for an order that expired is applied if the stock is still there, otherwise it is flagged for refund. Other events are acknowledged and ignored.",
         "security": [],
         "requestBody": {
           "required": true,
@@ -3255,6 +3377,192 @@
           },
           "502": {
             "description": "Bachs refused the request (its reason is in the message) or could not be reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Bachs is not configured on this server",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/store/{id}/payments/issues": {
+      "get": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Payments that need the seller's attention",
+        "description": "Payments with status `needs_refund` (money arrived for an order that expired and could no longer be filled, or that was already paid) or `review` (the amount, currency or account did not match). Refund them with `POST /store/{id}/payments/{paymentId}/refund`.",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StoreIdPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Payments that need attention"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PaymentIssue"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/store/{id}/payments/{paymentId}/refund": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Refund a payment, in full or in part",
+        "description": "Gives money back to the shopper from the seller's Bachs balance: the whole payment, or `amount` of it. Payments that are `paid`, `needs_refund` or `review` can be refunded. Bachs takes **one refund per payment**, so after a partial refund the rest can't be refunded later.\n\nBachs keeps its processing fee on a sale and does not give it back on a refund, so a seller whose balance is only that sale can't refund all of it. They get 409 with their available balance and can refund up to that.\n\nThe refund is usually `processing` at first; Bachs confirms it through the webhook. When it is `paid`, the payment becomes `refunded`. If this payment is what paid the order and the order is not fulfilled, the order is cancelled and its stock goes back on sale, unless `keep_order` is true (e.g. refunding one missing item while the rest is delivered).\n\nIf Bachs could not be reached (502), call again: the same refund is re-sent, never a second one. A `failed` refund can be tried again.",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StoreIdPath"
+          },
+          {
+            "name": "paymentId",
+            "in": "path",
+            "required": true,
+            "description": "Public payment id",
+            "schema": {
+              "type": "string",
+              "example": "pay_1c9e7d2b4a6f4e8d9c0b1a2f3e4d5c6b"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "amount": {
+                    "type": "string",
+                    "example": "14700.00",
+                    "description": "Optional. Up to the payment's amount, at most 2 decimal places. Omit for a full refund."
+                  },
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "example": "Out of stock"
+                  },
+                  "keep_order": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Refund without cancelling the order"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Refund requested"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Refund"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid amount (0 or less, more than the payment, more than 2 decimals) or reason too long",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Already refunded, a refund is in progress, the payment can't be refunded in its status, Bachs has not confirmed its charge yet, or the seller's Bachs balance is too low (the message gives the available balance)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bachs refused the refund (its reason is in the message) or could not be reached",
             "content": {
               "application/json": {
                 "schema": {

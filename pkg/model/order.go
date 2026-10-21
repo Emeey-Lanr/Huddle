@@ -105,6 +105,7 @@ type OrderResponse struct {
 	PaidAt         *time.Time          `json:"paid_at"`
 	CreatedAt      time.Time           `json:"created_at"`
 	UpdatedAt      time.Time           `json:"updated_at"`
+	Payment        *OrderPayment       `json:"payment,omitempty"` // seller views only
 }
 
 type OrderListResponse struct {

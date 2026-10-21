@@ -332,7 +332,18 @@ func ListSellerOrders(db *gorm.DB, publicStoreId string, adminId uuid.UUID, q mo
 	if appErr != nil {
 		return nil, appErr
 	}
-	return listOrders(db.Where("store_id = ?", store.ID), q)
+	resp, appErr := listOrders(db.Where("store_id = ?", store.ID), q)
+	if appErr != nil {
+		return nil, appErr
+	}
+	orders := make([]*model.OrderResponse, len(resp.Items))
+	for i := range resp.Items {
+		orders[i] = &resp.Items[i]
+	}
+	if err := attachPayments(db, store.ID, orders...); err != nil {
+		return nil, internalErr(err)
+	}
+	return resp, nil
 }
 
 func GetSellerOrder(db *gorm.DB, publicStoreId string, adminId uuid.UUID, publicOrderId string) (*model.OrderResponse, *utility.AppError) {
@@ -340,12 +351,60 @@ func GetSellerOrder(db *gorm.DB, publicStoreId string, adminId uuid.UUID, public
 	if appErr != nil {
 		return nil, appErr
 	}
-	return findOrder(db, store.ID, publicOrderId)
+	return sellerOrder(db, store.ID, publicOrderId)
+}
+
+// sellerOrder is an order with its payment, as its seller sees it.
+func sellerOrder(db *gorm.DB, storeId uuid.UUID, publicOrderId string) (*model.OrderResponse, *utility.AppError) {
+	o, appErr := findOrder(db, storeId, publicOrderId)
+	if appErr != nil {
+		return nil, appErr
+	}
+	if err := attachPayments(db, storeId, o); err != nil {
+		return nil, internalErr(err)
+	}
+	return o, nil
+}
+
+// attachPayments adds each order's payment: the one that took money if any,
+// otherwise the latest checkout, with the status of its latest refund.
+func attachPayments(db *gorm.DB, storeId uuid.UUID, orders ...*model.OrderResponse) error {
+	if len(orders) == 0 {
+		return nil
+	}
+	ids := make([]string, len(orders))
+	for i, o := range orders {
+		ids[i] = o.Id
+	}
+	var rows []struct {
+		OrderPublicId string
+		model.OrderPayment
+	}
+	err := db.Raw(`SELECT DISTINCT ON (p.order_id) o.public_id AS order_public_id, p.public_id AS payment_id,
+			p.status, p.amount, p.currency, p.paid_at,
+			COALESCE((SELECT r.status FROM refunds r WHERE r.payment_id = p.id ORDER BY r.created_at DESC LIMIT 1), '') AS refund_status
+		FROM payments p JOIN orders o ON o.id = p.order_id
+		WHERE o.store_id = ? AND o.public_id IN ?
+		ORDER BY p.order_id, (p.status IN ?), p.created_at DESC`,
+		storeId, ids, []string{model.PaymentOpen, model.PaymentExpired}).Scan(&rows).Error
+	if err != nil {
+		return err
+	}
+	byOrder := make(map[string]model.OrderPayment, len(rows))
+	for _, r := range rows {
+		byOrder[r.OrderPublicId] = r.OrderPayment
+	}
+	for _, o := range orders {
+		if p, ok := byOrder[o.Id]; ok {
+			o.Payment = &p
+		}
+	}
+	return nil
 }
 
 // allowedTransitions lists the status changes a seller can make. "paid" here
 // is for payments the seller confirms themselves (bank transfer, cash).
-// Paid orders cannot be cancelled until refunds exist.
+// A paid order is cancelled by refunding its payment (CancelRefunded).
 var allowedTransitions = map[string][]string{
 	model.OrderPending: {model.OrderPaid, model.OrderCancelled},
 	model.OrderPaid:    {model.OrderFulfilled},
@@ -397,7 +456,26 @@ func UpdateOrderStatus(db *gorm.DB, publicStoreId string, adminId uuid.UUID, pub
 		}
 		return nil, internalErr(txErr)
 	}
-	return findOrder(db, store.ID, publicOrderId)
+	return sellerOrder(db, store.ID, publicOrderId)
+}
+
+// CancelRefunded cancels a paid order inside tx once the payment that paid
+// it is refunded, and puts its stock back on sale. A fulfilled order stays
+// fulfilled: the goods have left.
+func CancelRefunded(tx *gorm.DB, orderId uuid.UUID, now time.Time) error {
+	var o model.Orders
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", orderId).First(&o).Error; err != nil {
+		return err
+	}
+	if o.Status != model.OrderPaid {
+		return nil
+	}
+	err := tx.Model(&model.Orders{}).Where("id = ?", o.Id).
+		Updates(map[string]any{"status": model.OrderCancelled, "updated_at": now}).Error
+	if err != nil {
+		return err
+	}
+	return restoreStock(tx, []uuid.UUID{o.Id})
 }
 
 // ExpireOrders marks pending orders past their hold time as expired and puts
