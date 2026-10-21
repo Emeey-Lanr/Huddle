@@ -14,7 +14,7 @@ type Products struct {
 	Name   string `json:"name" validate:"required"`
 	Description string `json:"description" validate:"required,min=10"`
 	Price  decimal.Decimal  `json:"price" validate:"required"`
-	Currency string `json:"currency" validate:"required,gte=3"`
+	Currency string `json:"currency" validate:"required,len=3"`
 	StockQuantity int `json:"stock_quantity" gorm:"column:stock_quantity"`
 	Active bool `json:"active"`
 	CreatedAt time.Time `json:"created_at" gorm:"column:created_at"`
@@ -25,7 +25,7 @@ type ProductResponse struct {
 	Name   string `json:"name" validate:"required"`
 	Description string `json:"description" validate:"required,min=10"`
 	Price  decimal.Decimal  `json:"price" validate:"required"`
-	Currency string `json:"currency" validate:"required,gte=3"`
+	Currency string `json:"currency" validate:"required,len=3"`
 	StockQuantity int `json:"stock_quantity" gorm:"column:stock_quantity"`
 	Active bool `json:"active"`
 	CreatedAt time.Time `json:"created_at" gorm:"column:created_at"`
@@ -33,15 +33,44 @@ type ProductResponse struct {
 }
 
 
+// product update request; nil or empty fields are left unchanged
+type ProductUpdate struct {
+	Name          string           `json:"name"`
+	Description   string           `json:"description"`
+	Price         *decimal.Decimal `json:"price"`
+	Currency      string           `json:"currency"`
+	StockQuantity *int             `json:"stock_quantity"`
+	Active        *bool            `json:"active"`
+}
+
 // product query
 type ProductQuery struct {
 	StoreId string `form:"store_id" binding:"required"`
 	Page int `form:"page"`
 	Limit int `form:"limit"`
-	MinPrice int `form:"min_price"`
-	MaxPrice int `form:"max-price"`
-	Sort string `form:"sort"`
-	Order string `form:"order"`
+	MinPrice float64 `form:"min_price"`
+	MaxPrice float64 `form:"max_price"`
+	Active *bool `form:"active"`
+	Sort string `form:"sort"`   // created_at (default), price, name
+	Order string `form:"order"` // desc (default) or asc
+}
+
+// StorefrontProductQuery is the public product list query. The store comes
+// from the X-Store-Key header and only active products are ever returned.
+type StorefrontProductQuery struct {
+	Page     int     `form:"page"`
+	Limit    int     `form:"limit"`
+	MinPrice float64 `form:"min_price"`
+	MaxPrice float64 `form:"max_price"`
+	Sort     string  `form:"sort"`
+	Order    string  `form:"order"`
+}
+
+type ProductListResponse struct {
+	Items []ProductResponse `json:"items"`
+	Page  int               `json:"page"`
+	Limit int               `json:"limit"`
+	Total int64             `json:"total"`
 }
 
 

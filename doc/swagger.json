@@ -1,55 +1,882 @@
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "Huddle API",
-    "version": "1.0.0"
+    "title": "Huddle Multi-Tenant E-Commerce API",
+    "description": "API for the Huddle multi-tenant e-commerce backend.\n\n**Auth.** Tokens are JWTs that last 1 hour and carry a role. Admin routes need an **admin** token (from `/admin/signup` or `/admin/signin`). `/customer/profile` and `/customer/orders` need a **customer** token (from `/customer/signup` or `/customer/signin`). Using the wrong role returns 403.\n\n**Responses.** Every response uses the same envelope: `{ success, message, data?, error? }`.\n\n**Money.** Prices are returned as decimal strings, e.g. `\"15000\"` or `\"1500.50\"`. Requests accept a number or a string.\n\n**Rate limit.** Sign-up and sign-in routes allow 60 requests per minute per IP, then return 429.\n\n**Storefronts.** Storefront websites call `/storefront/*` and `/cart` with the store's key in the `X-Store-Key` header. The key is **publishable** (it is visible in storefront pages): it only identifies the store for public actions and never grants seller access.\n\n**CORS.** Browser origins listed in `CORS_ALLOWED_ORIGINS` (exact origins or wildcards like `https://*.huddle.ng`) may call the API with credentials; storefronts must send requests with `credentials: \"include\"` so the cart cookie is kept.",
+    "version": "1.6.0"
   },
-  "tags": [
-    { "name": "Admin Auth", "description": "Admin Authetication endpoints" },
-    { "name": "Create Store", "description": "Store Creation endpoints" },
-    { "name": "Products", "description": "Produtcs Endpoint" }
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "Local"
+    }
   ],
-
+  "tags": [
+    {
+      "name": "Admin Auth",
+      "description": "Store owner (admin) accounts"
+    },
+    {
+      "name": "Store",
+      "description": "Store management"
+    },
+    {
+      "name": "Products",
+      "description": "Product catalog and images (admin only, own stores)"
+    },
+    {
+      "name": "Customer",
+      "description": "Shopper accounts within a store"
+    },
+    {
+      "name": "Storefront",
+      "description": "Public, read-only routes for storefront websites (X-Store-Key)"
+    },
+    {
+      "name": "Cart",
+      "description": "Shopping cart for storefronts (X-Store-Key); one cart per store per session"
+    },
+    {
+      "name": "Orders",
+      "description": "Checkout, the shopper's orders, and the seller's order management"
+    },
+    {
+      "name": "Payments",
+      "description": "Online payment through Bachs"
+    }
+  ],
   "components": {
     "securitySchemes": {
-      "BearerAuth": {
+      "AdminAuth": {
         "type": "http",
         "scheme": "bearer",
-        "bearerFormat": "JWT"
+        "bearerFormat": "JWT",
+        "description": "Admin token from /admin/signup or /admin/signin"
+      },
+      "CustomerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Customer token from /customer/signup or /customer/signin"
+      },
+      "CartSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "cart_session",
+        "description": "Set by POST /cart (HttpOnly, 7 days). Holds one cart per store. With APP_ENV=production it is Secure and SameSite=None so storefronts on other domains can send it; otherwise SameSite=Lax."
+      },
+      "StoreKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Store-Key",
+        "description": "The store's publishable key (the api_key returned once by POST /store/create)"
       }
     },
-
-    "parameters":{
-      "XStoreId":{
-        "name":"X-Store_Id",
-        "in":"header",
-        "required":true,
-        "description":"Store identifier",
-        "schema":{
-          "type":"string",
-          "format":"uuid"
+    "parameters": {
+      "XStoreIdHeader": {
+        "name": "X-Store-Id",
+        "in": "header",
+        "required": true,
+        "description": "Public store id returned by POST /store/create",
+        "schema": {
+          "type": "string",
+          "example": "str-2eb6c9490f2042139a1c5e7d8b6f4a21"
+        }
+      },
+      "ProductIdPath": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "Public product id",
+        "schema": {
+          "type": "string",
+          "example": "prod_2eb6c9490f2042139a1c5e7d8b6f4a21"
+        }
+      },
+      "StoreIdPath": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "Public store id",
+        "schema": {
+          "type": "string",
+          "example": "str-2eb6c9490f2042139a1c5e7d8b6f4a21"
+        }
+      },
+      "OrderIdPath": {
+        "name": "orderId",
+        "in": "path",
+        "required": true,
+        "description": "Public order id",
+        "schema": {
+          "type": "string",
+          "example": "ord_8c1f0e2d9b7a4c6e8f1a2b3c4d5e6f70"
+        }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": false
+          },
+          "message": {
+            "type": "string",
+            "example": "Product not found"
+          },
+          "error": {
+            "type": "string",
+            "example": "record not found"
+          }
+        }
+      },
+      "Money": {
+        "type": "string",
+        "description": "Decimal amount as a string",
+        "example": "15000"
+      },
+      "TokenData": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+          }
+        }
+      },
+      "Product": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "prod_2eb6c9490f2042139a1c5e7d8b6f4a21"
+          },
+          "name": {
+            "type": "string",
+            "example": "Ankara bag"
+          },
+          "description": {
+            "type": "string",
+            "example": "Handmade ankara tote bag"
+          },
+          "price": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "currency": {
+            "type": "string",
+            "example": "NGN"
+          },
+          "stock_quantity": {
+            "type": "integer",
+            "example": 10
+          },
+          "active": {
+            "type": "boolean",
+            "example": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ProductList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Product"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "example": 1
+          },
+          "limit": {
+            "type": "integer",
+            "example": 20
+          },
+          "total": {
+            "type": "integer",
+            "example": 25,
+            "description": "Number of products matching the filters, across all pages"
+          }
+        }
+      },
+      "Customer": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "example": "Ada Obi"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "ada@example.com"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CustomerAuthData": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+          },
+          "customer": {
+            "$ref": "#/components/schemas/Customer"
+          }
+        }
+      },
+      "CartItem": {
+        "type": "object",
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "example": "prod_2eb6c9490f2042139a1c5e7d8b6f4a21"
+          },
+          "product_name": {
+            "type": "string",
+            "example": "Ankara bag"
+          },
+          "product_price": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "currency": {
+            "type": "string",
+            "example": "NGN"
+          },
+          "quantity": {
+            "type": "integer",
+            "example": 2
+          }
+        }
+      },
+      "Cart": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "example": "cart_5f0c2b1e9a7d4c3b8e6f1a2d3c4b5a69"
+          },
+          "store_id": {
+            "type": "string",
+            "example": "str-2eb6c9490f2042139a1c5e7d8b6f4a21"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CartItem"
+            }
+          }
+        }
+      },
+      "Store": {
+        "type": "object",
+        "properties": {
+          "store_id": {
+            "type": "string",
+            "example": "str-2eb6c9490f2042139a1c5e7d8b6f4a21"
+          },
+          "store_name": {
+            "type": "string",
+            "example": "Chioma's Bags"
+          },
+          "store_description": {
+            "type": "string",
+            "example": "Handmade ankara bags and accessories"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "StorefrontStore": {
+        "type": "object",
+        "properties": {
+          "store_id": {
+            "type": "string",
+            "example": "str-2eb6c9490f2042139a1c5e7d8b6f4a21"
+          },
+          "store_name": {
+            "type": "string",
+            "example": "Chioma's Bags"
+          },
+          "store_description": {
+            "type": "string",
+            "example": "Handmade ankara bags and accessories"
+          }
+        }
+      },
+      "OrderItem": {
+        "type": "object",
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "example": "prod_2eb6c9490f2042139a1c5e7d8b6f4a21"
+          },
+          "product_name": {
+            "type": "string",
+            "example": "Ankara bag"
+          },
+          "unit_price": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "quantity": {
+            "type": "integer",
+            "example": 2
+          },
+          "line_total": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              }
+            ],
+            "example": "30000"
+          }
+        }
+      },
+      "Order": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "ord_8c1f0e2d9b7a4c6e8f1a2b3c4d5e6f70",
+            "description": "Random, hard-to-guess id; works as the shopper's receipt link"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "paid",
+              "fulfilled",
+              "cancelled",
+              "expired"
+            ],
+            "example": "pending"
+          },
+          "currency": {
+            "type": "string",
+            "example": "NGN"
+          },
+          "total": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              }
+            ],
+            "example": "30000"
+          },
+          "name": {
+            "type": "string",
+            "example": "Mama Nkechi"
+          },
+          "phone": {
+            "type": "string",
+            "example": "+2348031234567",
+            "description": "Spaces, dashes and brackets removed"
+          },
+          "email": {
+            "type": "string",
+            "example": ""
+          },
+          "delivery_method": {
+            "type": "string",
+            "enum": [
+              "delivery",
+              "pickup"
+            ]
+          },
+          "address": {
+            "type": "string",
+            "example": "12 Balogun Market Road"
+          },
+          "city": {
+            "type": "string",
+            "example": "Lagos Island"
+          },
+          "state": {
+            "type": "string",
+            "example": "Lagos"
+          },
+          "note": {
+            "type": "string",
+            "example": "Call when you reach the gate"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrderItem"
+            }
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "A pending order holds its stock until this time, then expires and the stock goes back on sale"
+          },
+          "paid_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "payment": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/OrderPayment"
+              }
+            ],
+            "description": "Seller views only (`/store/{id}/orders`); absent when the order has no online payment."
+          }
+        }
+      },
+      "OrderList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Order"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "example": 1
+          },
+          "limit": {
+            "type": "integer",
+            "example": 20
+          },
+          "total": {
+            "type": "integer",
+            "example": 1
+          }
+        }
+      },
+      "CheckoutRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "phone",
+          "delivery_method"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 250,
+            "example": "Mama Nkechi"
+          },
+          "phone": {
+            "type": "string",
+            "example": "0803 123 4567",
+            "description": "7 to 15 digits, optional leading +; spaces, dashes and brackets are allowed"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "Optional. Defaults to the account email when a customer token is sent"
+          },
+          "delivery_method": {
+            "type": "string",
+            "enum": [
+              "delivery",
+              "pickup"
+            ]
+          },
+          "address": {
+            "type": "string",
+            "description": "Required for delivery"
+          },
+          "city": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Required for delivery"
+          },
+          "state": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Required for delivery"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 1000
+          }
+        }
+      },
+      "PaymentCheckout": {
+        "type": "object",
+        "properties": {
+          "payment_id": {
+            "type": "string",
+            "example": "pay_4b1e9c0d2a7f4e3b8c6d5a1f0e2b3c4d"
+          },
+          "checkout_url": {
+            "type": "string",
+            "format": "uri",
+            "example": "https://checkout.bachs.io/chk_6R7s8T9u0V1w2X3y",
+            "description": "Send the shopper here to pay"
+          },
+          "amount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "currency": {
+            "type": "string",
+            "example": "NGN"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The checkout closes before the order's stock hold ends"
+          }
+        }
+      },
+      "CapabilityStatus": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "ngn_card_collection"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "restricted",
+              "pending",
+              "unrequested",
+              "unsupported"
+            ],
+            "example": "active"
+          },
+          "message": {
+            "type": "string",
+            "description": "Why the capability is not active, from Bachs. Show it to the seller.",
+            "example": "Upload a valid ID to start accepting cards."
+          }
+        }
+      },
+      "PaymentSetup": {
+        "type": "object",
+        "properties": {
+          "connected": {
+            "type": "boolean",
+            "description": "The store has a Bachs account",
+            "example": true
+          },
+          "ready": {
+            "type": "boolean",
+            "description": "Shoppers can pay the store online (NGN cards or bank transfer is active)",
+            "example": true
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CapabilityStatus"
+            }
+          },
+          "outstanding": {
+            "type": "array",
+            "description": "Details Bachs still needs from the seller",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "representative.id_document"
+            ]
+          }
+        }
+      },
+      "OnboardingLink": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "example": "https://connect.bachs.io/onboarding/alt_9fK2"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "OrderPayment": {
+        "type": "object",
+        "description": "The payment behind an order: the one that took money if any, otherwise the latest checkout.",
+        "properties": {
+          "payment_id": {
+            "type": "string",
+            "example": "pay_1c9e7d2b4a6f4e8d9c0b1a2f3e4d5c6b"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "paid",
+              "expired",
+              "needs_refund",
+              "review",
+              "refunded"
+            ],
+            "example": "paid",
+            "description": "`needs_refund`: money arrived for an order that could no longer take it. `review`: the amount, currency or account did not match the order."
+          },
+          "amount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "currency": {
+            "type": "string",
+            "example": "NGN"
+          },
+          "paid_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "refund_status": {
+            "type": "string",
+            "enum": [
+              "processing",
+              "paid",
+              "failed"
+            ],
+            "description": "Status of the latest refund, if any"
+          }
+        }
+      },
+      "PaymentIssue": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/OrderPayment"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "order_id": {
+                "type": "string",
+                "example": "ord_8c1f0e2d9b7a4c6e8f1a2b3c4d5e6f70"
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        ]
+      },
+      "Refund": {
+        "type": "object",
+        "properties": {
+          "refund_id": {
+            "type": "string",
+            "example": "rfd_5b2e8c1d9a7f4e3b8c6d1a0f2e4b7c9d"
+          },
+          "payment_id": {
+            "type": "string",
+            "example": "pay_1c9e7d2b4a6f4e8d9c0b1a2f3e4d5c6b"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "processing",
+              "paid",
+              "failed"
+            ],
+            "description": "`paid`: the money has gone back to the shopper."
+          },
+          "amount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "currency": {
+            "type": "string",
+            "example": "NGN"
+          },
+          "reason": {
+            "type": "string",
+            "example": "Out of stock"
+          },
+          "failure_reason": {
+            "type": "string",
+            "example": "Insufficient balance to refund"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completed_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "cancel_order": {
+            "type": "boolean",
+            "description": "The order is cancelled when this refund is paid"
+          }
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Invalid request body, query or values. For validation failures, `error` is a JSON object of field -> message, e.g. {\"currency\":\"currency must be exactly 3 characters\"}",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Missing or invalid token, or missing X-Store-Id header",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Wrong token role, or the store/product belongs to another admin",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Store or product not found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Already exists (names and emails are compared case-insensitively), or not enough stock",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "TooManyRequests": {
+        "description": "Rate limit exceeded (60 requests per minute per IP)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "CartOk": {
+        "description": "Current cart for this store",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": {
+                  "type": "boolean",
+                  "example": true
+                },
+                "message": {
+                  "type": "string",
+                  "example": "Cart retrieved successfully"
+                },
+                "data": {
+                  "$ref": "#/components/schemas/Cart"
+                }
+              }
+            }
+          }
+        }
+      },
+      "InvalidStoreKey": {
+        "description": "Missing or invalid X-Store-Key",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
         }
       }
     }
   },
-
   "paths": {
     "/admin/signup": {
       "post": {
-        "tags": ["Admin Auth"],
-        "summary": "Create an admin",
+        "tags": [
+          "Admin Auth"
+        ],
+        "summary": "Register a store owner (admin)",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["name", "username", "email", "password"],
+                "required": [
+                  "name",
+                  "username",
+                  "email",
+                  "password"
+                ],
                 "properties": {
-                  "name": { "type": "string" },
-                  "username": { "type": "string" },
-                  "email": { "type": "string", "format": "email" },
-                  "password": { "type": "string" }
+                  "name": {
+                    "type": "string",
+                    "example": "Chioma Eze"
+                  },
+                  "username": {
+                    "type": "string",
+                    "example": "chiomaeze"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "chioma@example.com"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 6,
+                    "example": "secret123"
+                  }
                 }
               }
             }
@@ -57,73 +884,124 @@
         },
         "responses": {
           "201": {
-            "description": "Admin Created",
+            "description": "Admin registered; returns an admin token",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "Message": { "type": "string" },
-                    "password": { "type": "string" }
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Registration Successful"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TokenData"
+                    }
                   }
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
           }
         }
       }
     },
-
     "/admin/signin": {
       "post": {
-        "tags": ["Admin Auth"],
-        "summary": "Create an admin",
+        "tags": [
+          "Admin Auth"
+        ],
+        "summary": "Sign in a store owner (admin)",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["username", "password"],
+                "required": [
+                  "username",
+                  "password"
+                ],
                 "properties": {
-                  "username": { "type": "string" },
-                  "password": { "type": "string" }
+                  "username": {
+                    "type": "string",
+                    "example": "chiomaeze"
+                  },
+                  "password": {
+                    "type": "string",
+                    "example": "secret123"
+                  }
                 }
               }
             }
           }
         },
         "responses": {
-          "201": {
-            "description": "Login Succesfull",
+          "200": {
+            "description": "Signed in; returns an admin token",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "data": {
-                      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...."
+                    "success": {
+                      "type": "boolean",
+                      "example": true
                     },
-                    "message": "Login Succesfull",
-                    "success": true
+                    "message": {
+                      "type": "string",
+                      "example": "Login Successful"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TokenData"
+                    }
                   }
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "description": "Invalid credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
           }
         }
       }
     },
-
     "/store/create": {
       "post": {
-        "tags": ["Create Store"],
-        "summary": "Create a store",
-        "security":[
-           {"BearerAuth":[]}
+        "tags": [
+          "Store"
         ],
-        "parameters":[ 
-         {"$ref":"#/components/parameters/XStoreId"}
+        "summary": "Create a store",
+        "description": "The `api_key` is shown **only once** in this response; only a hash is stored. It is the store's **publishable storefront key**: storefront pages send it as `X-Store-Key`, so treat it as public. Lost it? Use `POST /store/{id}/key` to issue a new one.",
+        "security": [
+          {
+            "AdminAuth": []
+          }
         ],
         "requestBody": {
           "required": true,
@@ -131,75 +1009,82 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["store", "description"],
+                "required": [
+                  "store_name",
+                  "store_description"
+                ],
                 "properties": {
-                  "store_name": { "type": "string" },
-                  "store_description": { "type": "string" }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Login Succesfull",
-            "content": {
-              "application/json": {
-                "schemas": {
-                  "type":"object",
-                  "properties":{
-                  "data":{
-                    "type":"object",
-                    "properties":{
-                      "apikey":{"type":"string"}
-                    }
+                  "store_name": {
+                    "type": "string",
+                    "example": "Chioma's Bags"
                   },
-                  "message":{"type":"string"}
+                  "store_description": {
+                    "type": "string",
+                    "minLength": 10,
+                    "example": "Handmade ankara bags and accessories"
                   }
                 }
               }
             }
           }
-        }
-      }
-    },
-
-    "/products/create": {
-      "post": {
-        "tags": ["Products"],
-        "summary": "Create a store",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object", 
-                "required": ["store", "description"],
-                "properties": {
-                  "name": "Dream",
-                  "description": "An art sofa crafted and designed by Emeey",
-                  "price": 50000,
-                  "currency": "USD",
-                  "stock_quantity": 2
-                }
-              }
-            }
-          }
         },
         "responses": {
           "201": {
-            "description": "Login Succesfull",
+            "description": "Store created",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "data": {
-                      "id": "2eb6c949-0f20-4213-a271-21ae9b3dcd42"
+                    "success": {
+                      "type": "boolean",
+                      "example": true
                     },
-                    "message": "Product Added Succesfully",
-                    "success": true
+                    "message": {
+                      "type": "string",
+                      "example": "Store Created Successfully"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "store_name": {
+                          "type": "string",
+                          "example": "Chioma's Bags"
+                        },
+                        "store_id": {
+                          "type": "string",
+                          "example": "str-2eb6c9490f2042139a1c5e7d8b6f4a21"
+                        },
+                        "api_key": {
+                          "type": "string",
+                          "example": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+                        },
+                        "created_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
                   }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "description": "You already have a store with this name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -207,46 +1092,2491 @@
         }
       }
     },
-
-    "/products/images": {
+    "/store/stores": {
+      "get": {
+        "tags": [
+          "Store"
+        ],
+        "summary": "List your stores",
+        "description": "Newest first. Never includes API keys.",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Your stores",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Stores retrieved successfully"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Store"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/store/{id}": {
+      "get": {
+        "tags": [
+          "Store"
+        ],
+        "summary": "Get one of your stores",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StoreIdPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Store",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Store retrieved successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Store"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Store"
+        ],
+        "summary": "Update one of your stores",
+        "description": "Send only the fields to change; empty or missing fields are not changed.",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StoreIdPath"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "store_name": {
+                    "type": "string",
+                    "maxLength": 150,
+                    "example": "Chioma Couture"
+                  },
+                  "store_description": {
+                    "type": "string",
+                    "minLength": 10
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated store",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Store updated successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Store"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "You already have a store with this name (case-insensitive)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/store/{id}/key": {
       "post": {
-        "tags": ["Products"],
-        "summary": "Add Image/s to product(min of 1 and max of 5) and each should be equal or lesser than 5mb",
+        "tags": [
+          "Store"
+        ],
+        "summary": "Regenerate the store's publishable key",
+        "description": "Issues a new store key and invalidates the old one immediately; storefronts using the old key get 401 until updated. The new key is shown only in this response.",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StoreIdPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "New key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Store key regenerated. The old key no longer works."
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "store_id": {
+                          "type": "string",
+                          "example": "str-2eb6c9490f2042139a1c5e7d8b6f4a21"
+                        },
+                        "api_key": {
+                          "type": "string",
+                          "example": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/product/": {
+      "post": {
+        "tags": [
+          "Products"
+        ],
+        "summary": "Create a product in one of your stores",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XStoreIdHeader"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "description",
+                  "price",
+                  "currency"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "example": "Ankara bag"
+                  },
+                  "description": {
+                    "type": "string",
+                    "minLength": 10,
+                    "example": "Handmade ankara tote bag"
+                  },
+                  "price": {
+                    "type": "number",
+                    "example": 15000
+                  },
+                  "currency": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 3,
+                    "example": "NGN"
+                  },
+                  "stock_quantity": {
+                    "type": "integer",
+                    "example": 10
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Product created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Product Added Successfully"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "example": "prod_2eb6c9490f2042139a1c5e7d8b6f4a21"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "A product with this name already exists in the store",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/product/products": {
+      "get": {
+        "tags": [
+          "Products"
+        ],
+        "summary": "List products in one of your stores",
+        "description": "Paginated, newest first by default. Includes hidden (inactive) products unless `active` is set.",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "store_id",
+            "in": "query",
+            "required": true,
+            "description": "Public store id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Values above 100 are capped at 100",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "min_price",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "max_price",
+            "in": "query",
+            "description": "Must not be lower than min_price",
+            "schema": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "active",
+            "in": "query",
+            "description": "true = visible products only, false = hidden only",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "created_at",
+                "price",
+                "name"
+              ],
+              "default": "created_at"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "desc",
+                "asc"
+              ],
+              "default": "desc"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of products",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Products retrieved successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ProductList"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/product/{id}": {
+      "get": {
+        "tags": [
+          "Products"
+        ],
+        "summary": "Get one of your products with its images",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProductIdPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Product found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Product Found"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "product": {
+                          "$ref": "#/components/schemas/Product"
+                        },
+                        "images": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "description": "Cloudinary image id",
+                                "example": "img_7c1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a"
+                              },
+                              "img_url": {
+                                "type": "string",
+                                "format": "uri"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Products"
+        ],
+        "summary": "Update one of your products",
+        "description": "Send only the fields to change; fields left out are not changed. `stock_quantity: 0` sets stock to zero.",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProductIdPath"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "price": {
+                    "type": "number",
+                    "minimum": 0,
+                    "example": 18000
+                  },
+                  "currency": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 3
+                  },
+                  "stock_quantity": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "active": {
+                    "type": "boolean",
+                    "description": "false hides the product from shoppers"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated product",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Product updated successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Product"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Another product in this store already has that name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Products"
+        ],
+        "summary": "Delete one of your products and its images",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProductIdPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Product deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/product/{id}/images": {
+      "post": {
+        "tags": [
+          "Products"
+        ],
+        "summary": "Upload images for one of your products",
+        "description": "1 to 5 files, each at most 5MB. JPEG, PNG, GIF or WebP.",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProductIdPath"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "multipart/form-data": {
               "schema": {
                 "type": "object",
+                "required": [
+                  "image"
+                ],
                 "properties": {
                   "image": {
-                    "type":"string",
-                    "format":"binary"
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 5,
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    }
                   }
                 }
-              },
-              "encoding":{
-               "image":{
-                "contentType":"image/jpeg"
-               }
               }
             }
           }
         },
         "responses": {
           "201": {
-            "description": "Login Succesfull",
+            "description": "Images uploaded",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "data": {
-                      "id": "2eb6c949-0f20-4213-a271-21ae9b3dcd42"
+                    "success": {
+                      "type": "boolean",
+                      "example": true
                     },
-                    "message": "Product Added Succesfully",
-                    "success": true
+                    "message": {
+                      "type": "string",
+                      "example": "Images uploaded successfully"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "product_id": {
+                          "type": "string"
+                        },
+                        "images": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "image_id": {
+                                "type": "string"
+                              },
+                              "image_url": {
+                                "type": "string",
+                                "format": "uri"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
                   }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "description": "Upload or save failed; uploaded files are removed from Cloudinary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/customer/signup": {
+      "post": {
+        "tags": [
+          "Customer"
+        ],
+        "summary": "Register a shopper in a store",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "store_id",
+                  "name",
+                  "email",
+                  "password"
+                ],
+                "properties": {
+                  "store_id": {
+                    "type": "string",
+                    "example": "str-2eb6c9490f2042139a1c5e7d8b6f4a21"
+                  },
+                  "name": {
+                    "type": "string",
+                    "example": "Ada Obi"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "ada@example.com"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 6,
+                    "example": "secret123"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Customer registered; returns a customer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Customer registered successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/CustomerAuthData"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Email already registered in this store",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/customer/signin": {
+      "post": {
+        "tags": [
+          "Customer"
+        ],
+        "summary": "Sign in a shopper",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "store_id",
+                  "email",
+                  "password"
+                ],
+                "properties": {
+                  "store_id": {
+                    "type": "string",
+                    "example": "str-2eb6c9490f2042139a1c5e7d8b6f4a21"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "ada@example.com"
+                  },
+                  "password": {
+                    "type": "string",
+                    "example": "secret123"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Signed in; returns a customer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Login successful"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/CustomerAuthData"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "description": "Invalid credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          }
+        }
+      }
+    },
+    "/customer/profile": {
+      "get": {
+        "tags": [
+          "Customer"
+        ],
+        "summary": "Get the signed-in shopper's profile",
+        "security": [
+          {
+            "CustomerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Profile fetched successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Customer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "Token is not a customer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Customer not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cart": {
+      "post": {
+        "tags": [
+          "Cart"
+        ],
+        "summary": "Add a product to this store's cart",
+        "description": "Name, price and currency always come from the database. Adding a product already in the cart increases its quantity. Sets the `cart_session` cookie if missing.",
+        "security": [
+          {
+            "StoreKey": []
+          },
+          {
+            "StoreKey": [],
+            "CartSession": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "product_id",
+                  "quantity"
+                ],
+                "properties": {
+                  "product_id": {
+                    "type": "string",
+                    "example": "prod_2eb6c9490f2042139a1c5e7d8b6f4a21"
+                  },
+                  "quantity": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "example": 2
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CartOk"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidStoreKey"
+          },
+          "404": {
+            "description": "Store not found, or product not found / hidden in this store",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not enough stock, e.g. \"Only 3 of Fila cap left in stock\"",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Cart"
+        ],
+        "summary": "Get this store's cart",
+        "description": "Returns an empty cart when there is no session yet.",
+        "security": [
+          {
+            "StoreKey": []
+          },
+          {
+            "StoreKey": [],
+            "CartSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CartOk"
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidStoreKey"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Cart"
+        ],
+        "summary": "Empty this store's cart",
+        "description": "Carts for other stores in the same session are kept.",
+        "security": [
+          {
+            "StoreKey": []
+          },
+          {
+            "StoreKey": [],
+            "CartSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cart cleared"
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidStoreKey"
+          }
+        }
+      }
+    },
+    "/cart/items/{id}": {
+      "put": {
+        "tags": [
+          "Cart"
+        ],
+        "summary": "Set the quantity of a product in this store's cart",
+        "security": [
+          {
+            "StoreKey": [],
+            "CartSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProductIdPath"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "quantity"
+                ],
+                "properties": {
+                  "quantity": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "example": 3
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CartOk"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidStoreKey"
+          },
+          "404": {
+            "description": "No cart session, product not in this store, or product not in the cart",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not enough stock",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Cart"
+        ],
+        "summary": "Remove a product from this store's cart",
+        "security": [
+          {
+            "StoreKey": [],
+            "CartSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProductIdPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CartOk"
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidStoreKey"
+          },
+          "404": {
+            "description": "No cart session, or product not in the cart",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/storefront/store": {
+      "get": {
+        "tags": [
+          "Storefront"
+        ],
+        "summary": "Public store info",
+        "security": [
+          {
+            "StoreKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Store",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Store retrieved successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/StorefrontStore"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidStoreKey"
+          }
+        }
+      }
+    },
+    "/storefront/products": {
+      "get": {
+        "tags": [
+          "Storefront"
+        ],
+        "summary": "List the store's visible products",
+        "description": "Only active products. Same paging, price filters and sorting as the admin list.",
+        "security": [
+          {
+            "StoreKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "description": "Values above 100 are capped at 100"
+          },
+          {
+            "name": "min_price",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "max_price",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "created_at",
+                "price",
+                "name"
+              ],
+              "default": "created_at"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "desc",
+                "asc"
+              ],
+              "default": "desc"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of products",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Products retrieved successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ProductList"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidStoreKey"
+          }
+        }
+      }
+    },
+    "/storefront/products/{id}": {
+      "get": {
+        "tags": [
+          "Storefront"
+        ],
+        "summary": "Get a visible product with its images",
+        "security": [
+          {
+            "StoreKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProductIdPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Product found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Product Found"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "product": {
+                          "$ref": "#/components/schemas/Product"
+                        },
+                        "images": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "description": "Cloudinary image id",
+                                "example": "img_7c1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a"
+                              },
+                              "img_url": {
+                                "type": "string",
+                                "format": "uri"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidStoreKey"
+          },
+          "404": {
+            "description": "Product not found, hidden, or in another store",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/storefront/checkout": {
+      "post": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "Place an order from the cart",
+        "description": "Turns this store's cart (from the `cart_session` cookie) into a **pending** order. Prices are read from the products at this moment, stock is held for 30 minutes (`ORDER_HOLD_MINUTES`), and the cart is emptied. If the order is not paid in time it expires and the stock goes back on sale.\n\n**Guests can check out.** If a customer token is sent, the order is linked to that account; a token that is invalid (401), not a customer token (403) or from another store (403) is refused, never ignored.\n\nIf any item is short of stock the whole order is refused and nothing is taken.",
+        "security": [
+          {
+            "StoreKey": [],
+            "CartSession": []
+          },
+          {
+            "StoreKey": [],
+            "CartSession": [],
+            "CustomerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckoutRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Order placed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Order placed successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Order"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed, invalid phone, empty cart, or items in different currencies",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidStoreKey"
+          },
+          "403": {
+            "description": "Token is not a customer token of this store",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "An item is sold out, has too little stock (e.g. \"Only 1 of Shoe left in stock\") or is no longer available; or a checkout of this cart is already running",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/storefront/orders/{id}": {
+      "get": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "View an order placed in this store",
+        "description": "For the shopper's order page or receipt link. Orders of other stores return 404.",
+        "security": [
+          {
+            "StoreKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Public order id",
+            "schema": {
+              "type": "string",
+              "example": "ord_8c1f0e2d9b7a4c6e8f1a2b3c4d5e6f70"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Order retrieved successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Order"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidStoreKey"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/customer/orders": {
+      "get": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "List the signed-in customer's orders",
+        "description": "Newest first. Guest orders are not included.",
+        "security": [
+          {
+            "CustomerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "paid",
+                "fulfilled",
+                "cancelled",
+                "expired"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Orders retrieved successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/OrderList"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/store/{id}/orders": {
+      "get": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "List a store's orders (owner only)",
+        "description": "Newest first, optionally filtered by status.",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StoreIdPath"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "paid",
+                "fulfilled",
+                "cancelled",
+                "expired"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Orders retrieved successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/OrderList"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/store/{id}/orders/{orderId}": {
+      "get": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "Get one order (owner only)",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StoreIdPath"
+          },
+          {
+            "$ref": "#/components/parameters/OrderIdPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Order retrieved successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Order"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "Change an order's status (owner only)",
+        "description": "Allowed changes:\n- `pending` → `paid` (the seller confirmed a transfer or cash payment)\n- `pending` → `cancelled` (the held stock goes back on sale)\n- `paid` → `fulfilled`\n\nAnything else returns 409. `expired` is set only by the system.",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StoreIdPath"
+          },
+          {
+            "$ref": "#/components/parameters/OrderIdPath"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "status"
+                ],
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "paid",
+                      "fulfilled",
+                      "cancelled"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Order updated successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Order"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Status change not allowed, e.g. \"A cancelled order cannot be marked paid\"",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/storefront/orders/{id}/pay": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Pay for an order with Bachs",
+        "description": "Opens a Bachs hosted checkout for a **pending** order and returns its `checkout_url`. The payment is charged to the store's Bachs sub-account, so the money lands in the seller's own balance. Calling again while that checkout is open returns the same one.\n\nAfter paying, Bachs sends the shopper to `success_url` with `?checkout_id=...`. **That redirect is not proof of payment**: the order turns `paid` only when Bachs confirms it through the signed webhook, so the success page should poll `GET /storefront/orders/{id}` until the status is `paid`.",
+        "security": [
+          {
+            "StoreKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Public order id",
+            "schema": {
+              "type": "string",
+              "example": "ord_8c1f0e2d9b7a4c6e8f1a2b3c4d5e6f70"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "success_url"
+                ],
+                "properties": {
+                  "success_url": {
+                    "type": "string",
+                    "format": "uri",
+                    "example": "https://chioma.huddle.ng/order/thanks",
+                    "description": "Full http(s) link"
+                  },
+                  "cancel_url": {
+                    "type": "string",
+                    "format": "uri",
+                    "example": "https://chioma.huddle.ng/cart"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Checkout ready"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PaymentCheckout"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidStoreKey"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "The order is already paid, no longer pending, about to expire, or the store can't take online payments yet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bachs refused the payment (its reason is included) or could not be reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Online payment is not set up on this server (BACHS_API_KEY)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/webhooks/bachs": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Bachs webhook receiver",
+        "description": "Called by Bachs, not by storefronts. Register this URL as two Bachs webhook endpoints, one for **Account events** and one for **Connected account events** (sellers' sub-accounts), since an endpoint listens to one source. Set `BACHS_WEBHOOK_SECRET` to both signing secrets, comma-separated.\n\nEvery delivery must carry a valid `X-Bachs-Signature-V2` (or `X-Bachs-Timestamp` + `X-Bachs-Signature`) made with one of the `BACHS_WEBHOOK_SECRET` secrets, no older than 5 minutes. Each event id is handled once.\n\nHandled events: `checkout.completed` (with `payment_status: paid`) and `collection.succeeded` mark the order paid, after checking amount, currency and seller account; a mismatch is held for review. `checkout.expired` closes the checkout. `refund.created`, `refund.paid` and `refund.failed` settle refunds. `capability.updated` records whether a seller's account can take payments (see `GET /store/{id}/payments`). A payment for an order that expired is applied if the stock is still there, otherwise it is flagged for refund. Other events are acknowledged and ignored.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Event received"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad signature or malformed event; Bachs will not retry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Processing failed; Bachs retries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "BACHS_WEBHOOK_SECRET is not set; Bachs retries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/store/{id}/payments": {
+      "get": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Can the store take online payments?",
+        "description": "Reads the store's Bachs account and returns whether shoppers can pay online (`ready`), the status of each capability and what Bachs still needs from the seller. Use it on the seller's return from onboarding: the return itself does not mean onboarding succeeded. If Bachs can't be reached, the last known statuses are returned.",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StoreIdPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Payment setup retrieved"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PaymentSetup"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/store/{id}/payments/onboarding": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Set up online payments with Bachs",
+        "description": "Creates the store's Bachs account if it has none, then returns a single-use link to Bachs' hosted onboarding. Send the seller there straight away: each call replaces the previous link, and links expire.\n\nBachs sends the seller to `return_url` when they finish or leave; then check `GET /store/{id}/payments`. An expired or used link leads to `refresh_url`, which should call this endpoint again for a fresh link. Once the store is ready, the link lets the seller update their details instead.\n\nThe seller's money lands in this account's balance. In production a store can't take online payments until `ready` is true.",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StoreIdPath"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "return_url",
+                  "refresh_url"
+                ],
+                "properties": {
+                  "return_url": {
+                    "type": "string",
+                    "format": "uri",
+                    "example": "https://huddle.ng/dashboard/payments",
+                    "description": "Full http(s) link"
+                  },
+                  "refresh_url": {
+                    "type": "string",
+                    "format": "uri",
+                    "example": "https://huddle.ng/dashboard/payments/retry",
+                    "description": "Full http(s) link"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Open the link to set up payments"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/OnboardingLink"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Nothing to update, or Bachs has suspended or rejected the account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bachs refused the request (its reason is in the message) or could not be reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Bachs is not configured on this server",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/store/{id}/payments/issues": {
+      "get": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Payments that need the seller's attention",
+        "description": "Payments with status `needs_refund` (money arrived for an order that expired and could no longer be filled, or that was already paid) or `review` (the amount, currency or account did not match). Refund them with `POST /store/{id}/payments/{paymentId}/refund`.",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StoreIdPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Payments that need attention"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PaymentIssue"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/store/{id}/payments/{paymentId}/refund": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Refund a payment, in full or in part",
+        "description": "Gives money back to the shopper from the seller's Bachs balance: the whole payment, or `amount` of it. Payments that are `paid`, `needs_refund` or `review` can be refunded. Bachs takes **one refund per payment**, so after a partial refund the rest can't be refunded later.\n\nBachs keeps its processing fee on a sale and does not give it back on a refund, so a seller whose balance is only that sale can't refund all of it. They get 409 with their available balance and can refund up to that.\n\nThe refund is usually `processing` at first; Bachs confirms it through the webhook. When it is `paid`, the payment becomes `refunded`. If this payment is what paid the order and the order is not fulfilled, the order is cancelled and its stock goes back on sale, unless `keep_order` is true (e.g. refunding one missing item while the rest is delivered).\n\nIf Bachs could not be reached (502), call again: the same refund is re-sent, never a second one. A `failed` refund can be tried again.",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StoreIdPath"
+          },
+          {
+            "name": "paymentId",
+            "in": "path",
+            "required": true,
+            "description": "Public payment id",
+            "schema": {
+              "type": "string",
+              "example": "pay_1c9e7d2b4a6f4e8d9c0b1a2f3e4d5c6b"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "amount": {
+                    "type": "string",
+                    "example": "14700.00",
+                    "description": "Optional. Up to the payment's amount, at most 2 decimal places. Omit for a full refund."
+                  },
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "example": "Out of stock"
+                  },
+                  "keep_order": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Refund without cancelling the order"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Refund requested"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Refund"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid amount (0 or less, more than the payment, more than 2 decimals) or reason too long",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Already refunded, a refund is in progress, the payment can't be refunded in its status, Bachs has not confirmed its charge yet, or the seller's Bachs balance is too low (the message gives the available balance)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bachs refused the refund (its reason is in the message) or could not be reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Bachs is not configured on this server",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }

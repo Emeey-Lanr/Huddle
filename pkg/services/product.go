@@ -46,16 +46,11 @@ func AddProduct (req model.Products, db *gorm.DB , rdb *redis.Client, adminId, s
 	 }
 
 	 if exists && helperErr == nil{
-		return nil, &utility.AppError{StatusCode: http.StatusUnauthorized, Message: "Product already exists", Err: errors.New("Product already exists")}
+		return nil, &utility.AppError{StatusCode: http.StatusConflict, Message: "Product already exists", Err: errors.New("Product already exists")}
 	 }
 
 	 productId := utility.GenerateUUID()
      productPublicId := fmt.Sprintf("prod_%s", strings.ReplaceAll(utility.GenerateUUID().String(), "-", "")) 
-	 
-	 // Redis
-	 if  err := rdb.Set(context.Background(),productPublicId, productId.String(), 30 * time.Minute).Err(); err != nil{
-		return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Err", Err: err}
-	 }
 
 	 product := model.Products{Id: productId, 
 		StoreId:*internalStoreId,
@@ -69,15 +64,23 @@ func AddProduct (req model.Products, db *gorm.DB , rdb *redis.Client, adminId, s
 
 		
 	if err :=  db.Create(&product).Error;  err != nil{
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			return nil, &utility.AppError{StatusCode: http.StatusConflict, Message: "Product already exists", Err: err}
+		}
       return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err: err}
 	}
+
+	 // Cache public -> internal id only once the product exists.
+	 if  err := rdb.Set(context.Background(),productPublicId, productId.String(), 30 * time.Minute).Err(); err != nil{
+		return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Err", Err: err}
+	 }
 
   return &product, nil
 }
 
 
-func  AddImages (db *gorm.DB, rdb *redis.Client, images []*multipart.FileHeader,  publicProductId string) (*model.ImagesCreatedResponse, *utility.AppError){
-	internalProductId, helperErr := helper.ValidateProductId(db,rdb, publicProductId)
+func  AddImages (db *gorm.DB, rdb *redis.Client, images []*multipart.FileHeader,  publicProductId, adminId string) (*model.ImagesCreatedResponse, *utility.AppError){
+	internalProductId, helperErr := helper.VerifyProductOwnership(db, rdb, publicProductId, adminId)
 	 if helperErr != nil{
 		return nil, helperErr
 	 }	 
@@ -118,26 +121,44 @@ func  AddImages (db *gorm.DB, rdb *redis.Client, images []*multipart.FileHeader,
    return &imageResponse, nil
 }
 
-func GetAllProducts (db *gorm.DB, rdb *redis.Client, queryData model.ProductQuery) (*[]model.ProductResponse, *utility.AppError) {
+func GetAllProducts (db *gorm.DB, rdb *redis.Client, queryData model.ProductQuery, adminId string) (*model.ProductListResponse, *utility.AppError) {
+	if helperErr := helper.NormalizeProductQuery(&queryData); helperErr != nil {
+		return nil, helperErr
+	}
+
+	adminIdUUID, err := utility.StringToUUID(adminId)
+	if err != nil {
+		return nil, &utility.AppError{StatusCode: http.StatusUnauthorized, Message: "Invalid admin id", Err: err}
+	}
 
      internalStoreId, helperErr :=   helper.GetInternalStoreId(rdb, db, queryData.StoreId);
 	 if helperErr != nil {
 		return nil,  helperErr
 	 }
 
+	 if helperErr := helper.VerifyOwnerShip(db, *internalStoreId, adminIdUUID); helperErr != nil {
+		return nil, helperErr
+	 }
+
 	   query :=  helper.GetAllProductQueryChain(db, *internalStoreId, queryData)
-	    var  products  []model.ProductResponse
-	   err := query.Find(&products).Error
+
+	   var total int64
+	   if err := query.Session(&gorm.Session{}).Count(&total).Error; err != nil {
+		 return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Err", Err: err}
+	   }
+
+	    products := []model.ProductResponse{}
+	   err = helper.PageProductQuery(query, queryData).Find(&products).Error
 	   if err != nil{
 		 return nil,  &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Err", Err: err}
 	   }
-	  
-   return  &products, nil
-} 
+
+   return  &model.ProductListResponse{Items: products, Page: queryData.Page, Limit: queryData.Limit, Total: total}, nil
+}
 
 
-func GetAProduct (db *gorm.DB, rdb *redis.Client, publicId string) (*model.ProductResponse, *[]model.ImagesResponse, *utility.AppError){
-	 internalId, helperErr := helper.ValidateProductId(db, rdb, publicId)
+func GetAProduct (db *gorm.DB, rdb *redis.Client, publicId, adminId string) (*model.ProductResponse, *[]model.ImagesResponse, *utility.AppError){
+	 internalId, helperErr := helper.VerifyProductOwnership(db, rdb, publicId, adminId)
 	 if helperErr != nil{
 		return nil, nil, helperErr
 	 }
@@ -146,7 +167,7 @@ func GetAProduct (db *gorm.DB, rdb *redis.Client, publicId string) (*model.Produ
 	 err := db.Model(&model.Products{}).Omit("id, store_id").Where("id = ? AND public_id = ?", internalId, publicId).First(&product).Error 
 	 if err != nil{
 		 if errors.Is(err, gorm.ErrRecordNotFound){
-               	return nil, nil,  &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "User Not Found", Err:err}
+               	return nil, nil,  &utility.AppError{StatusCode: http.StatusNotFound, Message: "Product not found", Err:err}
 		 }
 		 return nil, nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err:err}
 	 }
@@ -163,8 +184,8 @@ func GetAProduct (db *gorm.DB, rdb *redis.Client, publicId string) (*model.Produ
 
 }
 
-func DeleteProduct (db *gorm.DB, rdb *redis.Client, publicProductId string) *utility.AppError{
-	  internalProductId, helperErr := helper.ValidateProductId(db,rdb, publicProductId)
+func DeleteProduct (db *gorm.DB, rdb *redis.Client, publicProductId, adminId string) *utility.AppError{
+	  internalProductId, helperErr := helper.VerifyProductOwnership(db, rdb, publicProductId, adminId)
 	 if helperErr != nil{
 		return  helperErr
 	 }	 
@@ -197,4 +218,58 @@ func DeleteProduct (db *gorm.DB, rdb *redis.Client, publicProductId string) *uti
 	}
 	return nil
 
+}
+
+func UpdateProduct(db *gorm.DB, rdb *redis.Client, publicProductId, adminId string, req model.ProductUpdate) (*model.ProductResponse, *utility.AppError) {
+	if req.Price != nil && req.Price.IsNegative() {
+		return nil, &utility.AppError{StatusCode: http.StatusBadRequest, Message: "Price cannot be negative", Err: errors.New("negative price")}
+	}
+	if req.Currency != "" && len(req.Currency) != 3 {
+		return nil, &utility.AppError{StatusCode: http.StatusBadRequest, Message: "currency must be exactly 3 characters", Err: errors.New("invalid currency")}
+	}
+	if req.StockQuantity != nil && *req.StockQuantity < 0 {
+		return nil, &utility.AppError{StatusCode: http.StatusBadRequest, Message: "Stock quantity cannot be negative", Err: errors.New("negative stock")}
+	}
+
+	internalProductId, helperErr := helper.VerifyProductOwnership(db, rdb, publicProductId, adminId)
+	if helperErr != nil {
+		return nil, helperErr
+	}
+
+	updates := make(map[string]interface{})
+	if req.Name != "" {
+		updates["name"] = req.Name
+	}
+	if req.Description != "" {
+		updates["description"] = req.Description
+	}
+	if req.Price != nil {
+		updates["price"] = *req.Price
+	}
+	if req.Currency != "" {
+		updates["currency"] = req.Currency
+	}
+	if req.StockQuantity != nil {
+		updates["stock_quantity"] = *req.StockQuantity
+	}
+	if req.Active != nil {
+		updates["active"] = *req.Active
+	}
+	updates["updated_at"] = time.Now().UTC()
+
+	if len(updates) > 0 {
+		if err := db.Model(&model.Products{}).Where("id = ?", internalProductId).Updates(updates).Error; err != nil {
+			if errors.Is(err, gorm.ErrDuplicatedKey) {
+				return nil, &utility.AppError{StatusCode: http.StatusConflict, Message: "Another product in this store already has that name", Err: err}
+			}
+			return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Could not update product", Err: err}
+		}
+	}
+
+	var product model.ProductResponse
+	if err := db.Model(&model.Products{}).Omit("id, store_id").Where("id = ?", internalProductId).First(&product).Error; err != nil {
+		return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Could not fetch updated product", Err: err}
+	}
+
+	return &product, nil
 }

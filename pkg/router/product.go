@@ -20,7 +20,7 @@ func ProductRouter ( r *gin.Engine,db *gorm.DB, rdb *redis.Client) {
 		productRoutes.POST("/", middleware.StoreContextMiddleware, productsController.Add)
 		productRoutes.GET("/products", productsController.GetAllProducts) 
 		productRoutes.GET("/:id", productsController.GetAProduct)
-		productRoutes.PUT("/:id")
+		productRoutes.PUT("/:id", productsController.UpdateProduct)
 		productRoutes.DELETE("/:id",  productsController.DeleteProduct)
 		
 	 }

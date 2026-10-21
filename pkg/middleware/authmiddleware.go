@@ -10,12 +10,22 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func AuthMiddleware(c *gin.Context){
-	header :=  c.GetHeader("Authorization")
-    if header == ""{
-       response.Error(c, http.StatusUnauthorized, "Authorization header is missing", errors.New("Missing authorization header"))
-	   c.Abort()
-	   return
+// AuthMiddleware allows admin tokens only and sets "adminId" and "email".
+func AuthMiddleware(c *gin.Context) {
+	authenticate(c, utility.RoleAdmin, "adminId")
+}
+
+// CustomerAuthMiddleware allows customer tokens only and sets "customerId" and "email".
+func CustomerAuthMiddleware(c *gin.Context) {
+	authenticate(c, utility.RoleCustomer, "customerId")
+}
+
+func authenticate(c *gin.Context, role, idKey string) {
+	header := c.GetHeader("Authorization")
+	if header == "" {
+		response.Error(c, http.StatusUnauthorized, "Authorization header is missing", errors.New("Missing authorization header"))
+		c.Abort()
+		return
 	}
 
 	auth := strings.Fields(header)
@@ -25,16 +35,31 @@ func AuthMiddleware(c *gin.Context){
 		c.Abort()
 		return
 	}
-    
-	claims, err := utility.VerifyToken(auth[1])
-	if err != nil{
-		response.Error(c, http.StatusUnauthorized, "Error Validating token", err)
-	  c.Abort()
-	  return
-	}
-    
-  c.Set("adminId", claims.AdminId)
-  c.Set("email", claims.Email)
-  c.Next()
 
+	claims, err := utility.VerifyToken(auth[1])
+	if err != nil {
+		response.Error(c, http.StatusUnauthorized, "Error Validating token", err)
+		c.Abort()
+		return
+	}
+
+	if claims.Role != role {
+		response.Error(c, http.StatusForbidden, "You do not have access to this resource", errors.New("wrong token role"))
+		c.Abort()
+		return
+	}
+
+	c.Set(idKey, claims.UserId)
+	c.Set("email", claims.Email)
+	c.Next()
+}
+
+// OptionalCustomerAuth lets guests through. When an Authorization header is
+// sent it must be a valid customer token, and "customerId" is set.
+func OptionalCustomerAuth(c *gin.Context) {
+	if c.GetHeader("Authorization") == "" {
+		c.Next()
+		return
+	}
+	authenticate(c, utility.RoleCustomer, "customerId")
 }

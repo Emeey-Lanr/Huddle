@@ -25,7 +25,8 @@ type AdminSignin struct {
 }
 
 type Claims struct {
-	AdminId string `json:"admin_id"`
+	UserId string `json:"user_id"`
 	Email string `json:"email"`
+	Role string `json:"role"`
 	jwt.RegisteredClaims
 }

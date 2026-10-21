@@ -33,7 +33,7 @@ func GetInternalStoreId(rdb *redis.Client, db *gorm.DB,  storePublicId string ) 
 	      var store model.Stores
 	   if  err :=  db.Where("store_id = ?", storePublicId).First(&store).Error; err != nil{
 		 if errors.Is(err, gorm.ErrRecordNotFound){
-           return nil, &utility.AppError{StatusCode: http.StatusUnauthorized, Message: "Store Creation not allowed", Err: errors.New("Invalid StoreId")}
+           return nil, &utility.AppError{StatusCode: http.StatusNotFound, Message: "Store not found", Err: errors.New("Invalid StoreId")}
 		 }
 		 return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server", Err: err}
 	   }
@@ -64,7 +64,7 @@ func VerifyOwnerShip (db *gorm.DB, storeId, adminId uuid.UUID) *utility.AppError
     var store model.Stores
  if err := db.Where("admin_id = ? AND id = ?", adminId, storeId).First(&store).Error; err != nil{
    if errors.Is(err, gorm.ErrRecordNotFound){
-     return &utility.AppError{StatusCode: http.StatusUnauthorized, Message: "Status Not Verfied", Err: errors.New("Status Not Verified")}
+     return &utility.AppError{StatusCode: http.StatusForbidden, Message: "Ownership not verified", Err: errors.New("admin does not own this store")}
    }
    return &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err: err}
  }
@@ -96,7 +96,7 @@ func ValidateProductId(db *gorm.DB, rdb *redis.Client, publicId string)(*uuid.UU
 		if err == redis.Nil{
 			if 	err := db.Where("public_id = ?", publicId).First(&product).Error; err != nil{
 	      if errors.Is(err, gorm.ErrRecordNotFound){
-		  return  nil, &utility.AppError{StatusCode: http.StatusUnauthorized, Message: "Invalid Id", Err: err}
+		  return  nil, &utility.AppError{StatusCode: http.StatusNotFound, Message: "Product not found", Err: err}
 	    }else{
 		 return  nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Err", Err: err}
 		}
@@ -109,6 +109,7 @@ func ValidateProductId(db *gorm.DB, rdb *redis.Client, publicId string)(*uuid.UU
 	 return &product.Id, nil
 
 	 }
+		return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Err", Err: err}
 	}
 
    uuidInternalProductId, err := utility.StringToUUID(internalProductId)
@@ -119,11 +120,80 @@ func ValidateProductId(db *gorm.DB, rdb *redis.Client, publicId string)(*uuid.UU
    return &uuidInternalProductId, nil
 }
 
+// VerifyProductOwnership returns the internal product id when the product
+// belongs to a store owned by adminId, and 403 otherwise.
+func VerifyProductOwnership(db *gorm.DB, rdb *redis.Client, publicProductId, adminId string) (*uuid.UUID, *utility.AppError) {
+	adminUUID, err := utility.StringToUUID(adminId)
+	if err != nil {
+		return nil, &utility.AppError{StatusCode: http.StatusUnauthorized, Message: "Invalid admin id", Err: err}
+	}
+
+	internalProductId, helperErr := ValidateProductId(db, rdb, publicProductId)
+	if helperErr != nil {
+		return nil, helperErr
+	}
+
+	var count int64
+	err = db.Model(&model.Products{}).
+		Joins("JOIN stores ON stores.id = products.store_id").
+		Where("products.id = ? AND stores.admin_id = ?", *internalProductId, adminUUID).
+		Count(&count).Error
+	if err != nil {
+		return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err: err}
+	}
+	if count == 0 {
+		return nil, &utility.AppError{StatusCode: http.StatusForbidden, Message: "Ownership not verified", Err: errors.New("admin does not own this product")}
+	}
+
+	return internalProductId, nil
+}
+
+const (
+	DefaultProductLimit = 20
+	MaxProductLimit     = 100
+)
+
+var productSortColumns = map[string]string{"created_at": "created_at", "price": "price", "name": "name"}
+
+// NormalizeProductQuery fills in paging defaults, caps the limit and rejects bad filters.
+func NormalizeProductQuery(q *model.ProductQuery) *utility.AppError {
+	if q.Page < 1 {
+		q.Page = 1
+	}
+	if q.Limit < 1 {
+		q.Limit = DefaultProductLimit
+	}
+	if q.Limit > MaxProductLimit {
+		q.Limit = MaxProductLimit
+	}
+	if q.MinPrice < 0 || q.MaxPrice < 0 {
+		return &utility.AppError{StatusCode: http.StatusBadRequest, Message: "Price filters cannot be negative", Err: errors.New("negative price filter")}
+	}
+	if q.MaxPrice > 0 && q.MinPrice > q.MaxPrice {
+		return &utility.AppError{StatusCode: http.StatusBadRequest, Message: "min_price cannot be greater than max_price", Err: errors.New("min_price > max_price")}
+	}
+	if q.Sort == "" {
+		q.Sort = "created_at"
+	}
+	if _, ok := productSortColumns[q.Sort]; !ok {
+		return &utility.AppError{StatusCode: http.StatusBadRequest, Message: "sort must be one of created_at, price, name", Err: errors.New("invalid sort")}
+	}
+	q.Order = strings.ToLower(q.Order)
+	if q.Order == "" {
+		q.Order = "desc"
+	}
+	if q.Order != "asc" && q.Order != "desc" {
+		return &utility.AppError{StatusCode: http.StatusBadRequest, Message: "order must be asc or desc", Err: errors.New("invalid order")}
+	}
+	return nil
+}
+
+// GetAllProductQueryChain applies the store and filter conditions (no paging or sorting).
 func GetAllProductQueryChain(db *gorm.DB, storeInternalId uuid.UUID, queryData model.ProductQuery)(*gorm.DB){
   query := db.Model(&model.Products{})
-  
+
   query = query.Where("store_id = ?", storeInternalId)
-  
+
   if queryData.MinPrice > 0 {
 	query = query.Where("price >= ?", queryData.MinPrice)
   }
@@ -132,9 +202,20 @@ func GetAllProductQueryChain(db *gorm.DB, storeInternalId uuid.UUID, queryData m
 	query = query.Where("price <= ?", queryData.MaxPrice)
   }
 
-  query = query.Omit("id, store_id").Limit(10)
+  if queryData.Active != nil {
+	query = query.Where("active = ?", *queryData.Active)
+  }
 
   return query
+}
+
+// PageProductQuery adds sorting and paging to a normalized query.
+func PageProductQuery(query *gorm.DB, q model.ProductQuery) *gorm.DB {
+	return query.
+		Order(productSortColumns[q.Sort] + " " + q.Order).
+		Order("id").
+		Offset((q.Page - 1) * q.Limit).
+		Limit(q.Limit)
 }
 
 
@@ -191,9 +272,12 @@ func UploadImagesToCloudinary (images []*multipart.FileHeader)([]string,[]string
 
 
 
+// deleteFromCloudinary is a variable so tests can run without Cloudinary.
+var deleteFromCloudinary = cloudinary.DeleteImageFromCloudinary
+
 func DeleteImagesInCloudinary (imgPublicId []string)*utility.AppError{
 	for _, val := range imgPublicId{
-      if err :=  cloudinary.DeleteImageFromCloudinary(val); err != nil{
+      if err :=  deleteFromCloudinary(val); err != nil{
 		return &utility.AppError{StatusCode: http.StatusInternalServerError, Message:"Internal Server Error", Err: err}
 	  }
 	}
@@ -215,10 +299,11 @@ func SaveImagesToDb (db *gorm.DB, imgPublicId, imgURL []string , productId uuid.
   })
   
   if err != nil{
+	 // Remove the uploaded files so they don't sit unused in Cloudinary.
 	 if  helperErr := DeleteImagesInCloudinary(imgPublicId); helperErr != nil{
         log.Println(err, imgPublicId)  //we need the log so we can manually delete failed images
-	    return &utility.AppError{StatusCode: http.StatusInternalServerError, Message:"Internal Server Error", Err: err}
 	}
+	return &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Couldn't save images", Err: err}
   }
 
  return nil
