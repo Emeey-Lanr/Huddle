@@ -8,9 +8,9 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
 
 ## Where we are (updated 23 Oct 2026)
 
-- **Branches:** local `main` has everything through 4.7 and 4.4b: `feat/order-notifications` and `feat/store-domains` were merged locally on 23 Oct (`go test ./...` passes), but **`main` is not pushed yet** (`origin/main` is still `42b034e`); pushing it marks the 4.7 PR merged. Next:
+- **Branches:** local `main` has everything through 4.7, 4.4b and 5.1: `feat/order-notifications`, `feat/store-domains` and `feat/health-check` were merged locally on 23 Oct (`go test ./...` passes), but **`main` is not pushed yet** (`origin/main` is still `42b034e`); pushing it marks the 4.7 PR merged. Next:
   1. Push `main` (`git push origin main`).
-  2. Section 5 (production readiness), starting with 5.1.
+  2. **5.2 graceful shutdown + server timeouts**, then the rest of section 5.
   3. Look into **2.8** (checkout lock 409 on a new cart) when convenient.
   - Dropped: resetting the Mailtrap password (decided 23 Oct: the Mailtrap sandbox won't be used in production).
 - **Sandbox tests passed (23 Oct 2026).** Test store `str-e5564c2ac9824cbdaeb4f0de579d0357` (seller `sandbox1792093898`, password `secret123`, Bachs account `acct_EPpm2BjrPWW263rN`; to get a store key for a new order, call `POST /store/{id}/key` as the seller). Order `ord_e9ab0c2a54704470945fefe7a54d2b0c` (₦15,000, Ankara bag ×1, pickup) was paid on the hosted checkout (test card `4242 4242 4242 4242`); its notification was `sent` on the first attempt 54 s later and the "New paid order" email in Mailtrap showed every detail correctly ✔. That brought the balance up, and a full refund of `ord_fe532f63baea4c23a4da1cf447c25dde` (`rfd_05e84867017e4f3a90ce78f02b126f5d`) went through: `refund.paid` arrived, the payment turned `refunded`, the order `cancelled` and the stock came back ✔. Earlier (15 Oct) the same refund with only ₦14,700 in the balance returned 409 with that balance ✔.
@@ -137,7 +137,7 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
 
 ## 5. Production readiness (enough for 200 SMEs on one server)
 
-- [ ] **5.1 Health check** — `GET /healthz` checking Postgres and Redis.
+- [x] **5.1 Health check** — `GET /healthz` (no auth) pings Postgres and Redis within 2 s: 200 `{postgres: ok, redis: ok}`, else 503 with the one that is `down`. Error details only go to the server log; `Cache-Control: no-store`; successful checks are left out of the request log so monitors don't flood it.
 - [ ] **5.2 Graceful shutdown + server timeouts** — replace `r.Run` with `http.Server`.
 - [ ] **5.3 Config** — port from env, Gin release mode in production. Set `APP_ENV=production` (cart cookie, see 2.6), `CORS_ALLOWED_ORIGINS` (see 4.4) and optionally `ORDER_HOLD_MINUTES` (default 30, see 4.5).
 - [ ] **5.4 Cloudinary client created once** — not per upload (`internal/cloudinary/client.go`).

@@ -17,6 +17,10 @@ func AuditLogMiddleware() gin.HandlerFunc {
 
 		latency := time.Since(start)
 		statusCode := c.Writer.Status()
+		// Monitors call the health check every few seconds; only failures are worth a log line.
+		if path == "/healthz" && statusCode < 400 {
+			return
+		}
 		clientIP := c.ClientIP()
 		method := c.Request.Method
 		userAgent := c.Request.UserAgent()

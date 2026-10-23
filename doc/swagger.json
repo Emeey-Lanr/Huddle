@@ -43,6 +43,10 @@
     {
       "name": "Payments",
       "description": "Online payment through Bachs"
+    },
+    {
+      "name": "Health",
+      "description": "Service status for monitors"
     }
   ],
   "components": {
@@ -867,6 +871,115 @@
     }
   },
   "paths": {
+    "/healthz": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Health check",
+        "description": "For load balancers and uptime monitors. Checks that Postgres and Redis answer within 2 seconds. No auth. Responses are never cached (`Cache-Control: no-store`), and successful checks are not written to the request log. Error details are only logged on the server.",
+        "responses": {
+          "200": {
+            "description": "Postgres and Redis both answer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Healthy"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "postgres": {
+                          "type": "string",
+                          "enum": [
+                            "ok",
+                            "down"
+                          ],
+                          "example": "ok"
+                        },
+                        "redis": {
+                          "type": "string",
+                          "enum": [
+                            "ok",
+                            "down"
+                          ],
+                          "example": "ok"
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "success": true,
+                  "message": "Healthy",
+                  "data": {
+                    "postgres": "ok",
+                    "redis": "ok"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Postgres or Redis is down",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Unhealthy"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "postgres": {
+                          "type": "string",
+                          "enum": [
+                            "ok",
+                            "down"
+                          ],
+                          "example": "ok"
+                        },
+                        "redis": {
+                          "type": "string",
+                          "enum": [
+                            "ok",
+                            "down"
+                          ],
+                          "example": "ok"
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "success": false,
+                  "message": "Unhealthy",
+                  "data": {
+                    "postgres": "ok",
+                    "redis": "down"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/signup": {
       "post": {
         "tags": [
