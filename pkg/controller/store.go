@@ -6,6 +6,7 @@ import (
 	"huddle/pkg/model"
 	"huddle/pkg/response"
 	"huddle/pkg/services"
+	"huddle/pkg/storedomain"
 	"huddle/pkg/utility"
 	"net/http"
 
@@ -16,8 +17,9 @@ import (
 )
 
 type StoreBase struct {
-	Db  *gorm.DB
-	Rdb *redis.Client
+	Db      *gorm.DB
+	Rdb     *redis.Client
+	Domains *storedomain.Cache
 }
 
 func (b *StoreBase) Create(c *gin.Context) {
@@ -154,4 +156,68 @@ func (b *StoreBase) RegenerateKey(c *gin.Context) {
 		"store_id": storeId,
 		"api_key":  apiKey,
 	})
+}
+
+func (b *StoreBase) ListDomains(c *gin.Context) {
+	adminId, ok := adminUUID(c)
+	if !ok {
+		return
+	}
+
+	domains, serviceErr := services.ListStoreDomains(b.Db, c.Param("id"), adminId)
+	if serviceErr != nil {
+		response.Error(c, serviceErr.StatusCode, serviceErr.Message, serviceErr.Err)
+		return
+	}
+
+	response.Success(c, "Store domains retrieved successfully", domains)
+}
+
+func (b *StoreBase) AddDomain(c *gin.Context) {
+	adminId, ok := adminUUID(c)
+	if !ok {
+		return
+	}
+	storeId := c.Param("id")
+
+	var req model.StoreDomainRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, "Invalid request payload", err)
+		return
+	}
+	if err := utility.Validate.Struct(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, "Validation failed", utility.ValidationErrors(err))
+		return
+	}
+
+	domain, created, serviceErr := services.AddStoreDomain(b.Db, b.Domains, storeId, adminId, req.Domain)
+	if serviceErr != nil {
+		audit.LogEvent(c.Request.Context(), "STORE_DOMAIN_ADDED", adminId.String(), storeId, "FAILED", map[string]interface{}{"domain": req.Domain, "error": serviceErr.Message})
+		response.Error(c, serviceErr.StatusCode, serviceErr.Message, serviceErr.Err)
+		return
+	}
+
+	if !created {
+		response.Success(c, "Domain already added", domain)
+		return
+	}
+	audit.LogEvent(c.Request.Context(), "STORE_DOMAIN_ADDED", adminId.String(), storeId, "SUCCESS", map[string]interface{}{"domain": domain.Domain})
+	response.Created(c, "Domain added", domain)
+}
+
+func (b *StoreBase) RemoveDomain(c *gin.Context) {
+	adminId, ok := adminUUID(c)
+	if !ok {
+		return
+	}
+	storeId := c.Param("id")
+
+	if serviceErr := services.RemoveStoreDomain(b.Db, b.Domains, storeId, adminId, c.Param("domain")); serviceErr != nil {
+		audit.LogEvent(c.Request.Context(), "STORE_DOMAIN_REMOVED", adminId.String(), storeId, "FAILED", map[string]interface{}{"domain": c.Param("domain"), "error": serviceErr.Message})
+		response.Error(c, serviceErr.StatusCode, serviceErr.Message, serviceErr.Err)
+		return
+	}
+
+	audit.LogEvent(c.Request.Context(), "STORE_DOMAIN_REMOVED", adminId.String(), storeId, "SUCCESS", map[string]interface{}{"domain": c.Param("domain")})
+	response.Success(c, "Domain removed", nil)
 }

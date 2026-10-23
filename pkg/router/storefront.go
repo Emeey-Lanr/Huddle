@@ -4,6 +4,7 @@ import (
 	"huddle/pkg/bachs"
 	"huddle/pkg/controller"
 	"huddle/pkg/middleware"
+	"huddle/pkg/storedomain"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -25,12 +26,12 @@ func WebhookRoutes(r *gin.Engine, db *gorm.DB) {
 
 // StorefrontRoutes are public, read-only routes for storefront websites,
 // identified by the store's publishable key in X-Store-Key.
-func StorefrontRoutes(r *gin.Engine, db *gorm.DB, rdb *redis.Client) {
+func StorefrontRoutes(r *gin.Engine, db *gorm.DB, rdb *redis.Client, domains *storedomain.Cache) {
 	storefront := &controller.StorefrontBase{Db: db}
 	orders := &controller.OrderController{Db: db, Redis: rdb}
 	payments := &controller.PaymentController{Db: db, Bachs: bachsClient()}
 	group := r.Group("/storefront")
-	group.Use(middleware.StoreKeyMiddleware(db))
+	group.Use(middleware.StoreKeyMiddleware(db, domains))
 
 	{
 		group.GET("/store", storefront.Store)

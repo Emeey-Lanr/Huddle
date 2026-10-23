@@ -1,11 +1,14 @@
 package middleware
 
 import (
+	"log"
 	"net/http"
 	"os"
-	"strings"
+
+	"huddle/pkg/storedomain"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 const (
@@ -14,11 +17,12 @@ const (
 )
 
 // CORSMiddleware lets browsers on allowed storefront origins call the API with
-// credentials (the cart cookie). CORS_ALLOWED_ORIGINS is a comma-separated
-// list of exact origins ("https://chiomasbags.com") or subdomain wildcards
-// ("https://*.huddle.ng"). Requests from other origins get no CORS headers,
-// and their preflight requests are rejected.
-func CORSMiddleware() gin.HandlerFunc {
+// credentials (the cart cookie). Allowed origins are those in
+// CORS_ALLOWED_ORIGINS, a comma-separated list of exact origins
+// ("https://chiomasbags.com") or subdomain wildcards ("https://*.huddle.ng"),
+// and https://<a store's custom domain>. Requests from other origins get no
+// CORS headers, and their preflight requests are rejected.
+func CORSMiddleware(domains *storedomain.Cache) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.GetHeader("Origin")
 		if origin == "" {
@@ -26,7 +30,7 @@ func CORSMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		allowed := originAllowed(origin, os.Getenv("CORS_ALLOWED_ORIGINS"))
+		allowed := originAllowed(origin, domains)
 		c.Writer.Header().Add("Vary", "Origin")
 		if allowed {
 			h := c.Writer.Header()
@@ -49,26 +53,20 @@ func CORSMiddleware() gin.HandlerFunc {
 	}
 }
 
-func originAllowed(origin, allowList string) bool {
-	for _, entry := range strings.Split(allowList, ",") {
-		entry = strings.TrimSpace(entry)
-		if entry == "" {
-			continue
-		}
-		if entry == origin {
-			return true
-		}
-		// "https://*.huddle.ng" matches "https://shop.huddle.ng" but not "https://huddle.ng"
-		// or "https://evilhuddle.ng".
-		if scheme, host, ok := strings.Cut(entry, "://*."); ok {
-			prefix := scheme + "://"
-			if strings.HasPrefix(origin, prefix) {
-				sub := strings.TrimPrefix(origin, prefix)
-				if strings.HasSuffix(sub, "."+host) && len(sub) > len(host)+1 && !strings.ContainsAny(sub, "/@") {
-					return true
-				}
-			}
-		}
+// originAllowed: a preflight carries no store key, so any store's domain is
+// accepted here; StoreKeyMiddleware then checks the domain matches the key.
+func originAllowed(origin string, domains *storedomain.Cache) bool {
+	if storedomain.OriginAllowed(origin, os.Getenv("CORS_ALLOWED_ORIGINS")) {
+		return true
 	}
-	return false
+	host, ok := storedomain.HTTPSHost(origin)
+	if !ok {
+		return false
+	}
+	storeId, err := domains.StoreFor(host)
+	if err != nil {
+		log.Printf("cors: looking up domain %s: %v", host, err)
+		return false
+	}
+	return storeId != uuid.Nil
 }

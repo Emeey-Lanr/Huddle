@@ -3,7 +3,9 @@ package router
 import (
 	"huddle/doc"
 	"huddle/pkg/middleware"
+	"huddle/pkg/storedomain"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -14,8 +16,11 @@ func RoutesSetup(db *gorm.DB, rdb *redis.Client) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(middleware.AuditLogMiddleware())
+	// Which store has which custom domain, shared by CORS and the store key check.
+	domains := storedomain.NewCache(db, time.Minute)
+
 	// Before any route: answers CORS preflight requests from storefronts.
-	r.Use(middleware.CORSMiddleware())
+	r.Use(middleware.CORSMiddleware(domains))
 
 	// Entry Route
 	r.GET("/", func(ctx *gin.Context) {
@@ -24,11 +29,11 @@ func RoutesSetup(db *gorm.DB, rdb *redis.Client) *gin.Engine {
 
 	// Registered Route Groups
 	AdminRouter(r, db, rdb)
-	StoreRouter(r, db, rdb)
+	StoreRouter(r, db, rdb, domains)
 	ProductRouter(r, db, rdb)
 	CustomerRoutes(r, db, rdb)
-	CartRoutes(r, db, rdb)
-	StorefrontRoutes(r, db, rdb)
+	CartRoutes(r, db, rdb, domains)
+	StorefrontRoutes(r, db, rdb, domains)
 	WebhookRoutes(r, db)
 
 	// Serves API documentation

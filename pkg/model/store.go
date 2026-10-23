@@ -35,6 +35,26 @@ type StorefrontStore struct {
 	StoreDescription string `json:"store_description"`
 }
 
+// StoreDomains is a custom domain a store's storefront runs on.
+type StoreDomains struct {
+	Id        uuid.UUID
+	StoreId   uuid.UUID // stores.id, not the public store id
+	Domain    string    // bare lowercase hostname, e.g. "chiomasbags.com"
+	CreatedAt time.Time
+}
+
+// StoreDomainRequest adds a domain; a full link such as "https://chiomasbags.com/" is accepted.
+type StoreDomainRequest struct {
+	Domain string `json:"domain" validate:"required,max=300"`
+}
+
+// StoreDomainResponse is a store domain as sellers see it.
+type StoreDomainResponse struct {
+	Domain    string    `json:"domain"`
+	Origin    string    `json:"origin"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 // StoreUpdate request; empty fields are left unchanged.
 type StoreUpdate struct {
 	StoreName        string `json:"store_name" validate:"omitempty,max=150"`
