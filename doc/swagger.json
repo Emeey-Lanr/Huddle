@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Huddle Multi-Tenant E-Commerce API",
-    "description": "API for the Huddle multi-tenant e-commerce backend.\n\n**Auth.** Tokens are JWTs that last 1 hour and carry a role. Admin routes need an **admin** token (from `/admin/signup` or `/admin/signin`). `/customer/profile` and `/customer/orders` need a **customer** token (from `/customer/signup` or `/customer/signin`). Using the wrong role returns 403.\n\n**Responses.** Every response uses the same envelope: `{ success, message, data?, error? }`.\n\n**Money.** Prices are returned as decimal strings, e.g. `\"15000\"` or `\"1500.50\"`. Requests accept a number or a string.\n\n**Rate limit.** Sign-up and sign-in routes allow 60 requests per minute per IP, then return 429.\n\n**Storefronts.** Storefront websites call `/storefront/*` and `/cart` with the store's key in the `X-Store-Key` header. The key is **publishable** (it is visible in storefront pages): it only identifies the store for public actions and never grants seller access.\n\n**CORS.** Browser origins listed in `CORS_ALLOWED_ORIGINS` (exact origins or wildcards like `https://*.huddle.ng`) may call the API with credentials; storefronts must send requests with `credentials: \"include\"` so the cart cookie is kept.",
+    "description": "API for the Huddle multi-tenant e-commerce backend.\n\n**Auth.** Tokens are JWTs that last 1 hour and carry a role. Admin routes need an **admin** token (from `/admin/signup` or `/admin/signin`). `/customer/profile` and `/customer/orders` need a **customer** token (from `/customer/signup` or `/customer/signin`). Using the wrong role returns 403.\n\n**Responses.** Every response uses the same envelope: `{ success, message, data?, error? }`.\n\n**Money.** Prices are returned as decimal strings, e.g. `\"15000\"` or `\"1500.50\"`. Requests accept a number or a string.\n\n**Rate limit.** Sign-up and sign-in routes allow 60 requests per minute per IP, then return 429.\n\n**Storefronts.** Storefront websites call `/storefront/*` and `/cart` with the store's key in the `X-Store-Key` header. The key is **publishable** (it is visible in storefront pages): it only identifies the store for public actions and never grants seller access.\n\n**CORS.** Browser origins listed in `CORS_ALLOWED_ORIGINS` (exact origins or wildcards like `https://*.huddle.ng`) and `https://<domain>` for each store's custom domains (`/store/{id}/domains`) may call the API with credentials; storefronts must send requests with `credentials: \"include\"` so the cart cookie is kept. A page on a store's custom domain may only use that store's key: other keys get 403 there. Origins in `CORS_ALLOWED_ORIGINS`, the API's own origin and requests without an `Origin` header (servers, curl) may use any key.",
     "version": "1.6.0"
   },
   "servers": [
@@ -112,6 +112,15 @@
           "type": "string",
           "example": "ord_8c1f0e2d9b7a4c6e8f1a2b3c4d5e6f70"
         }
+      },
+      "DomainPath": {
+        "name": "domain",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "example": "chiomasbags.com"
       }
     },
     "schemas": {
@@ -741,6 +750,24 @@
             "description": "The order is cancelled when this refund is paid"
           }
         }
+      },
+      "StoreDomain": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "example": "chiomasbags.com"
+          },
+          "origin": {
+            "type": "string",
+            "example": "https://chiomasbags.com",
+            "description": "The browser origin this domain allows"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
       }
     },
     "responses": {
@@ -1322,6 +1349,229 @@
                           "example": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
                         }
                       }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/store/{id}/domains": {
+      "get": {
+        "tags": [
+          "Store"
+        ],
+        "summary": "List the store's custom domains",
+        "description": "Domains the store's storefront runs on. Browsers on `https://<domain>` may call the storefront and cart routes with this store's key.",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StoreIdPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Domains, oldest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Store domains retrieved successfully"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/StoreDomain"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Store"
+        ],
+        "summary": "Connect a custom domain",
+        "description": "Lets the storefront on `https://<domain>` call the API with this store's key (CORS), with no server change. Send a bare domain or a full link; it is saved as a lowercase hostname (`https://ChiomasBags.com/` becomes `chiomasbags.com`). Each domain belongs to one store, and a store can have at most 5 (`www.` is a separate domain). Huddle subdomains (covered by a wildcard in `CORS_ALLOWED_ORIGINS`) don't need adding. Changes take effect at once on this server and within a minute on others.",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StoreIdPath"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "domain"
+                ],
+                "properties": {
+                  "domain": {
+                    "type": "string",
+                    "maxLength": 300,
+                    "example": "chiomasbags.com"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Domain added",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Domain added"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/StoreDomain"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The store already had this domain",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Domain already added"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/StoreDomain"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not a valid domain: has a path, port or IP address, or is a Huddle subdomain",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Another store has this domain, or the store already has 5",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/store/{id}/domains/{domain}": {
+      "delete": {
+        "tags": [
+          "Store"
+        ],
+        "summary": "Disconnect a custom domain",
+        "description": "Browsers on `https://<domain>` can no longer call the API with this store's key.",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StoreIdPath"
+          },
+          {
+            "$ref": "#/components/parameters/DomainPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Domain removed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Domain removed"
                     }
                   }
                 }
