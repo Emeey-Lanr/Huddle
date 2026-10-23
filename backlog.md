@@ -158,7 +158,7 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
   - Job **test**: Postgres 16 service, `go build`, `go vet`, `go test ./...` with `TEST_REQUIRE_DB=1` (new in `testutil`: a missing database fails the run instead of skipping the DB tests), and the Swagger validator.
   - Job **docker**: builds the image, writes a throwaway `.env`, checks `docker-compose.yml`, starts the whole stack (Postgres, Redis, migrations, API) and waits for `/healthz` to answer. This is what verifies 5.6; logs are printed if it fails.
 - [ ] **5.8 Deploy + backups** — managed Postgres with daily backups, logs collected.
-- [ ] **5.9 Repo cleanup** — remove committed `main.exe`, add it to `.gitignore`.
+- [x] **5.9 Repo cleanup** — `main.exe` is no longer tracked (the local file stays) and `*.exe` is in `.gitignore`. It remains in old commits' history; not worth rewriting history for.
 
 ---
 
