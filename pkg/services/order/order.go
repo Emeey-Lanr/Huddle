@@ -496,9 +496,12 @@ func ExpireOrders(db *gorm.DB, now time.Time) (int, error) {
 	return len(ids), err
 }
 
-// StartExpiryWorker runs ExpireOrders every interval until ctx is done.
-func StartExpiryWorker(ctx context.Context, db *gorm.DB, interval time.Duration) {
+// StartExpiryWorker runs ExpireOrders every interval until ctx is done. The
+// returned channel closes once it has stopped.
+func StartExpiryWorker(ctx context.Context, db *gorm.DB, interval time.Duration) <-chan struct{} {
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -515,6 +518,7 @@ func StartExpiryWorker(ctx context.Context, db *gorm.DB, interval time.Duration)
 			}
 		}
 	}()
+	return done
 }
 
 // PaymentOutcome is what happened to an order when a payment for it arrived.

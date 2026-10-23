@@ -8,10 +8,10 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
 
 ## Where we are (updated 23 Oct 2026)
 
-- **Branches:** local `main` has everything through 4.7, 4.4b and 5.1: `feat/order-notifications`, `feat/store-domains` and `feat/health-check` were merged locally on 23 Oct (`go test ./...` passes), but **`main` is not pushed yet** (`origin/main` is still `42b034e`); pushing it marks the 4.7 PR merged. Next:
+- **Branches:** local `main` has everything through 4.7, 4.4b and 5.1: `feat/order-notifications`, `feat/store-domains` and `feat/health-check` were merged locally on 23 Oct; **5.2** is on `feat/graceful-shutdown`, not committed yet (`go test ./...` passes), but **`main` is not pushed yet** (`origin/main` is still `42b034e`); pushing it marks the 4.7 PR merged. Next:
   1. Push `main` (`git push origin main`).
   2. Then follow this order (decided 23 Oct; it overrides "top to bottom" for sections 5 and 6), so each step gives something usable:
-     1. **Section 5 essentials:** 5.2 shutdown + timeouts, 5.3 config, 5.6 Docker, 5.8 deploy + backups (enough to run the API for real).
+     1. **Section 5 essentials:** ~~5.2 shutdown + timeouts~~ (done), 5.3 config, 5.6 Docker, 5.8 deploy + backups (enough to run the API for real).
      2. **6.2 Customer website (storefront template) + theme settings:** sellers can take real orders; the team sets each store's theme by hand at first. Onboard the first real sellers here and learn what they need.
      3. **6.1 phone login + 6.5 WhatsApp bot:** sellers run their shop from WhatsApp.
      4. **AI (6.3, 6.4, 6.6) + 6.7 preview:** the AI takes over the theming and content the team did by hand.
@@ -143,11 +143,11 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
 ## 5. Production readiness (enough for 200 SMEs on one server)
 
 - [x] **5.1 Health check** — `GET /healthz` (no auth) pings Postgres and Redis within 2 s: 200 `{postgres: ok, redis: ok}`, else 503 with the one that is `down`. Error details only go to the server log; `Cache-Control: no-store`; successful checks are left out of the request log so monitors don't flood it.
-- [ ] **5.2 Graceful shutdown + server timeouts** — replace `r.Run` with `http.Server`.
+- [x] **5.2 Graceful shutdown + server timeouts** — `main.go` serves through an `http.Server` (`server.go`): read-header 10 s, read 60 s (image uploads on slow data), write 60 s (Bachs onboarding takes up to 40 s), idle 120 s. On Ctrl+C or SIGTERM it stops taking connections and gives requests in progress up to 45 s, then waits (same limit) for the expiry and email workers to finish their current run (an email being sent is not cut off), then closes Redis and Postgres. **Docker/hosts must wait longer than 45 s before killing it** (Docker's default is 10 s: set `stop_grace_period: 50s` in 5.6).
 - [ ] **5.3 Config** — port from env, Gin release mode in production. Set `APP_ENV=production` (cart cookie, see 2.6), `CORS_ALLOWED_ORIGINS` (see 4.4) and optionally `ORDER_HOLD_MINUTES` (default 30, see 4.5).
 - [ ] **5.4 Cloudinary client created once** — not per upload (`internal/cloudinary/client.go`).
 - [ ] **5.5 Rate limiter in Redis** — so it works across more than one server.
-- [ ] **5.6 Dockerfile + docker-compose** — API, Postgres, Redis.
+- [ ] **5.6 Dockerfile + docker-compose** — API, Postgres, Redis. Give the API `stop_grace_period: 50s` (see 5.2).
 - [ ] **5.7 CI** — `go vet`, `go test`, build on every push.
 - [ ] **5.8 Deploy + backups** — managed Postgres with daily backups, logs collected.
 - [ ] **5.9 Repo cleanup** — remove committed `main.exe`, add it to `.gitignore`.
