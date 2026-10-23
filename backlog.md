@@ -10,7 +10,12 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
 
 - **Branches:** local `main` has everything through 4.7, 4.4b and 5.1: `feat/order-notifications`, `feat/store-domains` and `feat/health-check` were merged locally on 23 Oct (`go test ./...` passes), but **`main` is not pushed yet** (`origin/main` is still `42b034e`); pushing it marks the 4.7 PR merged. Next:
   1. Push `main` (`git push origin main`).
-  2. **5.2 graceful shutdown + server timeouts**, then the rest of section 5.
+  2. Then follow this order (decided 23 Oct; it overrides "top to bottom" for sections 5 and 6), so each step gives something usable:
+     1. **Section 5 essentials:** 5.2 shutdown + timeouts, 5.3 config, 5.6 Docker, 5.8 deploy + backups (enough to run the API for real).
+     2. **6.2 Customer website (storefront template) + theme settings:** sellers can take real orders; the team sets each store's theme by hand at first. Onboard the first real sellers here and learn what they need.
+     3. **6.1 phone login + 6.5 WhatsApp bot:** sellers run their shop from WhatsApp.
+     4. **AI (6.3, 6.4, 6.6) + 6.7 preview:** the AI takes over the theming and content the team did by hand.
+     - 5.4, 5.5, 5.7, 5.9 fit in whenever convenient; 6.9 only once a developer asks.
   3. Look into **2.8** (checkout lock 409 on a new cart) when convenient.
   - Dropped: resetting the Mailtrap password (decided 23 Oct: the Mailtrap sandbox won't be used in production).
 - **Sandbox tests passed (23 Oct 2026).** Test store `str-e5564c2ac9824cbdaeb4f0de579d0357` (seller `sandbox1792093898`, password `secret123`, Bachs account `acct_EPpm2BjrPWW263rN`; to get a store key for a new order, call `POST /store/{id}/key` as the seller). Order `ord_e9ab0c2a54704470945fefe7a54d2b0c` (₦15,000, Ankara bag ×1, pickup) was paid on the hosted checkout (test card `4242 4242 4242 4242`); its notification was `sent` on the first attempt 54 s later and the "New paid order" email in Mailtrap showed every detail correctly ✔. That brought the balance up, and a full refund of `ord_fe532f63baea4c23a4da1cf447c25dde` (`rfd_05e84867017e4f3a90ce78f02b126f5d`) went through: `refund.paid` arrived, the payment turned `refunded`, the order `cancelled` and the stock came back ✔. Earlier (15 Oct) the same refund with only ₦14,700 in the balance returned 409 with that balance ✔.
@@ -152,13 +157,16 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
 ## 6. Simple for everyone (WhatsApp + AI)
 
 - [ ] **6.1 Phone number + OTP login** — no passwords for sellers.
-- [ ] **6.2 Storefront template** — one fast, mobile-first template that reads store + theme.
-- [ ] **6.3 AI agent reads the Huddle API** — routes, models, Swagger and `context.md` (allowlisted files only, never `.env`) to build and connect a storefront from the template.
+- [ ] **6.2 Customer website (storefront template) + theme settings** — one fast, mobile-first template, built and tested once by Huddle and shared by every store (light enough for cheap Android phones on mobile data). Pages, all on APIs that already exist: shop home/product list (`GET /storefront/store`, `/storefront/products`), product page, cart (`/cart`), checkout (`POST /storefront/checkout`), pay (`POST /storefront/orders/:id/pay` → Bachs), order status/thank-you (`GET /storefront/orders/:id`), optional customer sign-in and order history (`/customer/*`).
+  - API work: per-store **theme settings** (logo, colours, banner, fonts, which sections to show, shop description), a seller route to save them, returned by `GET /storefront/store`.
+  - To decide: the tech stack, where it is hosted and how each store gets its address.
+- [ ] **6.3 AI sets each store's theme and content** — sellers never touch a theme editor: from chat or photos ("make it red and gold, like Ankara", a logo), the agent updates the store's theme settings and writes product descriptions. It edits **settings and content only, never code**, so it can't break checkout and every store keeps running the one tested template. The seller approves in the preview (6.7). Decided 23 Oct over having AI write a separate website per store (200 codebases to fix, risky for payments, slow and costly to regenerate).
 - [ ] **6.4 Photo → product** — seller sends a photo and price; the agent creates the product.
 - [ ] **6.5 WhatsApp bot** — set up store, add products, get order alerts, all in chat.
 - [ ] **6.6 Voice notes in Pidgin, Yoruba, Igbo, Hausa** — the agent understands them.
 - [ ] **6.7 Preview before publish** — seller approves the store before it goes live.
 - [ ] **6.8 Verify custom domain ownership** — before opening to many sellers: today any seller can claim any domain first (4.4b), which can't harm the real owner's site but can block them from adding it. Seller adds a `huddle-verify=<token>` DNS TXT record; only verified domains pass CORS. Until then, support removes a squatted domain from `store_domains`. When Huddle hosts storefronts (6.2), custom domains also need automatic HTTPS. Domain selling was considered and dropped (23 Oct).
+- [ ] **6.9 Developer docs** — later, only once a developer asks. Developers can already build their own storefront on the same API (`/storefront/*`, `/cart`, checkout, pay) with the store key, and connect their domain (4.4b). Still missing: getting-started docs beyond Swagger, and a test-mode store.
 
 ---
 
