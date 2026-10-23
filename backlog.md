@@ -8,10 +8,10 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
 
 ## Where we are (updated 23 Oct 2026)
 
-- **Branches:** local `main` has everything through 4.7, 4.4b, 5.1 and 5.2: `feat/order-notifications`, `feat/store-domains`, `feat/health-check` and `feat/graceful-shutdown` were merged locally on 23 Oct (`go test ./...` passes), but **`main` is not pushed yet** (`origin/main` is still `42b034e`); pushing it marks the 4.7 PR merged. Next:
+- **Branches:** local `main` has everything through 4.7, 4.4b, 5.1, 5.2 and 5.3: `feat/order-notifications`, `feat/store-domains`, `feat/health-check`, `feat/graceful-shutdown` and `feat/config` (5.3) were merged locally on 23 Oct (`go test ./...` passes), but **`main` is not pushed yet** (`origin/main` is still `42b034e`); pushing it marks the 4.7 PR merged. Next:
   1. Push `main` (`git push origin main`).
   2. Then follow this order (decided 23 Oct; it overrides "top to bottom" for sections 5 and 6), so each step gives something usable:
-     1. **Section 5 essentials:** ~~5.2 shutdown + timeouts~~ (done), 5.3 config, 5.6 Docker, 5.8 deploy + backups (enough to run the API for real).
+     1. **Section 5 essentials:** ~~5.2 shutdown + timeouts~~, ~~5.3 config~~ (done), 5.6 Docker, 5.8 deploy + backups (enough to run the API for real).
      2. **6.2 Customer website (storefront template) + theme settings:** sellers can take real orders; the team sets each store's theme by hand at first. Onboard the first real sellers here and learn what they need.
      3. **6.1 phone login + 6.5 WhatsApp bot:** sellers run their shop from WhatsApp.
      4. **AI (6.3, 6.4, 6.6) + 6.7 preview:** the AI takes over the theming and content the team did by hand.
@@ -143,7 +143,11 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
 
 - [x] **5.1 Health check** — `GET /healthz` (no auth) pings Postgres and Redis within 2 s: 200 `{postgres: ok, redis: ok}`, else 503 with the one that is `down`. Error details only go to the server log; `Cache-Control: no-store`; successful checks are left out of the request log so monitors don't flood it.
 - [x] **5.2 Graceful shutdown + server timeouts** — `main.go` serves through an `http.Server` (`server.go`): read-header 10 s, read 60 s (image uploads on slow data), write 60 s (Bachs onboarding takes up to 40 s), idle 120 s. On Ctrl+C or SIGTERM it stops taking connections and gives requests in progress up to 45 s, then waits (same limit) for the expiry and email workers to finish their current run (an email being sent is not cut off), then closes Redis and Postgres. **Docker/hosts must wait longer than 45 s before killing it** (Docker's default is 10 s: set `stop_grace_period: 50s` in 5.6).
-- [ ] **5.3 Config** — port from env, Gin release mode in production. Set `APP_ENV=production` (cart cookie, see 2.6), `CORS_ALLOWED_ORIGINS` (see 4.4) and optionally `ORDER_HOLD_MINUTES` (default 30, see 4.5).
+- [x] **5.3 Config** — `pkg/config` checks every setting at startup; the API refuses to start with a list of what to fix (setting names only, never values) and logs warnings for risky gaps. `PORT` (default 8080); `APP_ENV=production` turns on Gin release mode, the production cart cookie (2.6) and production payment rules.
+  - **Stops startup:** `APP_ENV` other than `production`/`development` (a typo like `prod` would silently skip production behaviour); bad `PORT`; no `SECRET_KEY`, or under 32 characters in production; no `DB_HOST`/`DB_USER`/`DB_NAME`; bad `DB_SSLMODE`; `ORDER_HOLD_MINUTES` not a whole number above 0; `BACHS_PLATFORM_FEE_PERCENT` not 0 to below 100; bad `TRUSTED_PROXIES`; in production, no `BACHS_API_KEY`/`BACHS_WEBHOOK_SECRET`.
+  - **Warns in production:** `DB_SSLMODE` unset/`disable`, no `TRUSTED_PROXIES`, no `CORS_ALLOWED_ORIGINS`, no SMTP, no `CLOUDINARY_URL`.
+  - **New settings:** `DB_SSLMODE` (default `disable`; managed Postgres usually needs `require`) and `TRUSTED_PROXIES` (IPs/CIDRs of the load balancer). **Security fix:** Gin believed `X-Forwarded-For` from anyone, so a client could fake its IP and dodge the sign-in rate limiter; now only `TRUSTED_PROXIES` may set it, otherwise the connecting address is used. Set it in production behind a proxy, or every client shares the proxy's IP for rate limiting.
+  - The local `.env` passes the check (development, port 8080, no problems).
 - [ ] **5.4 Cloudinary client created once** — not per upload (`internal/cloudinary/client.go`).
 - [ ] **5.5 Rate limiter in Redis** — so it works across more than one server.
 - [ ] **5.6 Dockerfile + docker-compose** — API, Postgres, Redis. Give the API `stop_grace_period: 50s` (see 5.2).

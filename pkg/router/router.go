@@ -2,10 +2,13 @@ package router
 
 import (
 	"huddle/doc"
+	"huddle/pkg/config"
 	"huddle/pkg/controller"
 	"huddle/pkg/middleware"
 	"huddle/pkg/storedomain"
+	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -15,6 +18,12 @@ import (
 
 func RoutesSetup(db *gorm.DB, rdb *redis.Client) *gin.Engine {
 	r := gin.New()
+	// Only these proxies may report the client's IP (X-Forwarded-For); by
+	// default Gin believes anyone, which would let clients dodge the rate limiter.
+	if err := r.SetTrustedProxies(config.TrustedProxies(os.Getenv)); err != nil {
+		log.Printf("TRUSTED_PROXIES ignored: %v", err)
+		r.SetTrustedProxies(nil)
+	}
 	r.Use(gin.Recovery())
 	r.Use(middleware.AuditLogMiddleware())
 	// Which store has which custom domain, shared by CORS and the store key check.
