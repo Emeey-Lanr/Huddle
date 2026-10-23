@@ -186,3 +186,52 @@ func TestMoney(t *testing.T) {
 		t.Errorf("money(usd) = %q", got)
 	}
 }
+
+// blockingSender holds each send until release is closed and reports whether
+// its context was cancelled meanwhile.
+type blockingSender struct {
+	started   chan struct{}
+	release   chan struct{}
+	cancelled bool
+}
+
+func (b *blockingSender) Send(ctx context.Context, _ mail.Message) error {
+	close(b.started)
+	<-b.release
+	b.cancelled = ctx.Err() != nil
+	return ctx.Err()
+}
+
+func TestStartWorker_FinishesSendOnStop(t *testing.T) {
+	db := testutil.NewDB(t)
+	now := time.Now().UTC()
+	_, o := paidOrder(t, db, now)
+	if err := QueueOrderPaid(db, o.Id, now.Add(-time.Minute)); err != nil {
+		t.Fatalf("queue: %v", err)
+	}
+
+	b := &blockingSender{started: make(chan struct{}), release: make(chan struct{})}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := StartWorker(ctx, db, b, 10*time.Millisecond)
+
+	<-b.started
+	cancel() // the API is stopping while an email is being sent
+	select {
+	case <-done:
+		t.Fatal("worker stopped in the middle of a send")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	close(b.release)
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("worker did not stop")
+	}
+	if b.cancelled {
+		t.Error("the send in progress was cancelled")
+	}
+	if n := notificationFor(t, db, o.Id); n.Status != model.NotificationSent || n.Attempts != 1 {
+		t.Errorf("notification = %s after %d attempts, want sent after 1", n.Status, n.Attempts)
+	}
+}

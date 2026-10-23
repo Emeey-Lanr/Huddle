@@ -3,7 +3,10 @@ package main
 import (
 	"context"
 	"log"
+	"net"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"huddle/db/connection"
@@ -30,21 +33,41 @@ func main() {
 	db := connection.ConnectToDb()
 	rdb := connection.ConnectToRedis()
 
+	// Done on Ctrl+C or SIGTERM (sent by Docker and most hosts to stop the API).
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	// Releases stock held by unpaid orders once their hold time passes.
-	order.StartExpiryWorker(context.Background(), db, time.Minute)
+	workers := []<-chan struct{}{order.StartExpiryWorker(ctx, db, time.Minute)}
 
 	// Emails sellers about their paid orders. Without SMTP settings the
 	// emails stay queued and go out once it is configured.
 	if sender, err := mail.FromEnv(); err != nil {
 		log.Printf("Seller emails are not sent: %v", err)
 	} else {
-		notification.StartWorker(context.Background(), db, sender, time.Minute)
+		workers = append(workers, notification.StartWorker(ctx, db, sender, time.Minute))
 	}
 
-	r := router.RoutesSetup(db, rdb)
-
-	log.Println("Huddle E-Commerce API running on port :8080")
-	if err := r.Run(":8080"); err != nil {
+	ln, err := net.Listen("tcp", ":8080")
+	if err != nil {
 		log.Fatalf("Server startup failed: %v", err)
 	}
+	log.Println("Huddle E-Commerce API running on port :8080")
+	if err := serve(ctx, newHTTPServer(router.RoutesSetup(db, rdb)), ln, shutdownTimeout); err != nil {
+		log.Fatalf("Server stopped with an error: %v", err)
+	}
+
+	// Requests are done; let the workers finish their current run before
+	// the database goes away.
+	log.Println("Shutting down: waiting for background workers")
+	if !waitFor(time.Now().Add(shutdownTimeout), workers...) {
+		log.Println("Background workers did not finish in time")
+	}
+	if err := rdb.Close(); err != nil {
+		log.Printf("Closing Redis: %v", err)
+	}
+	if sqlDB, err := db.DB(); err == nil {
+		sqlDB.Close()
+	}
+	log.Println("Huddle E-Commerce API stopped")
 }

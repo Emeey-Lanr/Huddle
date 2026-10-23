@@ -187,9 +187,13 @@ func money(currency string, amount decimal.Decimal) string {
 	return sign + strings.ToUpper(currency) + " " + g.String() + frac
 }
 
-// StartWorker runs SendDue every interval until ctx is done.
-func StartWorker(ctx context.Context, db *gorm.DB, sender mail.Sender, interval time.Duration) {
+// StartWorker runs SendDue every interval until ctx is done. A run in
+// progress finishes its batch first (cancelling a send would count as a
+// failed attempt); the returned channel closes once the worker has stopped.
+func StartWorker(ctx context.Context, db *gorm.DB, sender mail.Sender, interval time.Duration) <-chan struct{} {
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -197,7 +201,7 @@ func StartWorker(ctx context.Context, db *gorm.DB, sender mail.Sender, interval 
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				n, err := SendDue(ctx, db, sender, time.Now().UTC())
+				n, err := SendDue(context.WithoutCancel(ctx), db, sender, time.Now().UTC())
 				if err != nil {
 					log.Printf("notifications: %v", err)
 				} else if n > 0 {
@@ -206,4 +210,5 @@ func StartWorker(ctx context.Context, db *gorm.DB, sender mail.Sender, interval 
 			}
 		}
 	}()
+	return done
 }

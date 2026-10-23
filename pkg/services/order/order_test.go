@@ -1,6 +1,7 @@
 package order
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"sync"
@@ -334,5 +335,17 @@ func TestUpdateOrderStatus(t *testing.T) {
 	otherStore := testutil.SeedStore(t, s.db, s.admin.Id)
 	if _, appErr := UpdateOrderStatus(s.db, otherStore.StoreId, s.admin.Id, sold, model.OrderPaid); appErr == nil || appErr.StatusCode != http.StatusNotFound {
 		t.Errorf("order of another store: %+v, want 404", appErr)
+	}
+}
+
+func TestStartExpiryWorker_StopsWithContext(t *testing.T) {
+	db := testutil.NewDB(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := StartExpiryWorker(ctx, db, time.Hour)
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("expiry worker did not stop")
 	}
 }
