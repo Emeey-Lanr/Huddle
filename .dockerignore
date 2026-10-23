@@ -1,0 +1,13 @@
+# Secrets never go into the image: pass settings with env_file or the host's environment.
+.env
+.env.*
+
+.git
+.gitignore
+main.exe
+*.exe
+tmp/
+*.md
+Dockerfile
+docker-compose.yml
+.dockerignore
