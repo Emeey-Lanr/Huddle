@@ -13,7 +13,6 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
   2. Then follow this order (decided 23 Oct; it overrides "top to bottom" for sections 5 and 6), so each step gives something usable:
      1. **Section 5 essentials:** ~~5.2 shutdown + timeouts~~ (done), 5.3 config, 5.6 Docker, 5.8 deploy + backups (enough to run the API for real).
      2. **6.2 Customer website (storefront template) + theme settings:** sellers can take real orders; the team sets each store's theme by hand at first. Onboard the first real sellers here and learn what they need.
-     - Then **4.8 music downloads (MP3)**, for musicians selling their own music (they can sell merch from step 2).
      3. **6.1 phone login + 6.5 WhatsApp bot:** sellers run their shop from WhatsApp.
      4. **AI (6.3, 6.4, 6.6) + 6.7 preview:** the AI takes over the theming and content the team did by hand.
      - 5.4, 5.5, 5.7, 5.9 fit in whenever convenient; 6.9 only once a developer asks.
@@ -138,14 +137,6 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
   - Email on `feat/order-notifications` (pushed, PR open), seen end to end in the sandbox on 23 Oct ✔. Over SMTP: `SMTP_HOST`, `SMTP_PORT` (default 587; 465 = TLS from the start, others STARTTLS when offered), `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` (e.g. `Huddle <orders@huddle.ng>`). Without `SMTP_HOST`/`SMTP_FROM` the API still starts and emails stay queued.
   - When a Bachs payment marks an order paid (including a late payment that revives it), migration `000012` `notifications` gets a row in the same transaction (one per order). A worker sends due rows every minute to the store owner's current email (items, total, customer contact, delivery/pickup, note) and retries failures after 1m, 4m, 16m… up to 6h, giving up after 8 attempts (`failed`, `last_error` kept).
   - No email when the seller marks an order paid themselves, or for payments flagged `needs_refund`/`review` (decided 21 Oct; those are listed at `GET /store/:id/payments/issues`).
-- [ ] **4.8 Digital products: music downloads (MP3)** — for musicians selling their own music directly (merch already works as normal products). Build after 6.2 (the customer website plays previews and serves downloads). Decided 23 Oct:
-  - **Product type `digital`:** no stock limit (optional limited edition), no delivery address. Checkout requires the shopper's email when the cart has a digital item.
-  - **Files:** **MP3 only** for now (check the content, not just the name; about 20 MB per track; recommend 320 kbps). An album is several tracks. The artist uploads a separate short **preview clip** (auto-cutting previews needs ffmpeg: later). WAV/FLAC maybe later.
-  - **Storage: AWS S3** (private bucket, nearest region `af-south-1` Cape Town). Full tracks are never public; previews can be. Product images stay on Cloudinary; move them only if there's a reason later.
-  - **Delivery:** once Bachs confirms payment, the order page shows download links and the shopper gets an email with them (reuse the 4.7 email worker). Links are S3 presigned URLs issued per paid order, valid a few days and a few downloads (e.g. 7 days, 5 downloads).
-  - **Piracy:** can't be fully prevented (anything playable can be recorded; DRM is not worth it). Make sharing traceable and buying easy: stamp each copy's ID3 tags with the buyer and order ("Licensed to …, order ord_…"); expiring links; full tracks never public. An inaudible audio watermark only if ever needed.
-  - **Rights:** sellers may only sell music they own or have rights to (distributor contracts may limit direct sales). Add this to the terms, plus a takedown process that can trace a leaked copy to its order.
-
 ---
 
 ## 5. Production readiness (enough for 200 SMEs on one server)
@@ -175,6 +166,21 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
 - [ ] **6.7 Preview before publish** — seller approves the store before it goes live.
 - [ ] **6.8 Verify custom domain ownership** — before opening to many sellers: today any seller can claim any domain first (4.4b), which can't harm the real owner's site but can block them from adding it. Seller adds a `huddle-verify=<token>` DNS TXT record; only verified domains pass CORS. Until then, support removes a squatted domain from `store_domains`. When Huddle hosts storefronts (6.2), custom domains also need automatic HTTPS. Domain selling was considered and dropped (23 Oct).
 - [ ] **6.9 Developer docs** — later, only once a developer asks. Developers can already build their own storefront on the same API (`/storefront/*`, `/cart`, checkout, pay) with the store key, and connect their domain (4.4b). Still missing: getting-started docs beyond Swagger, and a test-mode store.
+
+---
+
+## Future updates
+
+Not in the current plan; pick up once the basics are live and there is demand.
+
+- [ ] **Music downloads (MP3)** — for musicians selling their own music directly. Moved out of the current plan on 23 Oct: musicians sell merch (normal products) as soon as the API is deployed and the customer website (6.2) is up; build this once they are selling and there is clear demand. Needs 6.2 (plays previews, serves downloads). Decided so far:
+  - **Product type `digital`:** no stock limit (optional limited edition), no delivery address. Checkout requires the shopper's email when the cart has a digital item.
+  - **Files:** **MP3 only** for now (check the content, not just the name; about 20 MB per track; recommend 320 kbps). An album is several tracks. The artist uploads a separate short **preview clip** (auto-cutting previews needs ffmpeg: later). WAV/FLAC maybe later.
+  - **Storage: AWS S3** (private bucket, nearest region `af-south-1` Cape Town). Full tracks are never public; previews can be. Product images stay on Cloudinary; move them only if there's a reason later.
+  - **Delivery:** once Bachs confirms payment, the order page shows download links and the shopper gets an email with them (reuse the 4.7 email worker). Links are S3 presigned URLs issued per paid order, valid a few days and a few downloads (e.g. 7 days, 5 downloads).
+  - **Piracy:** can't be fully prevented (anything playable can be recorded; DRM is not worth it). Make sharing traceable and buying easy: stamp each copy's ID3 tags with the buyer and order ("Licensed to …, order ord_…"); expiring links; full tracks never public. An inaudible audio watermark only if ever needed.
+  - **Rights:** sellers may only sell music they own or have rights to (distributor contracts may limit direct sales). Add this to the terms, plus a takedown process that can trace a leaked copy to its order.
+
 
 ---
 
