@@ -8,7 +8,7 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
 
 ## Where we are (updated 23 Oct 2026)
 
-- **Branches:** local `main` has everything through 4.7, 4.4b, 5.1, 5.2 and 5.3: `feat/order-notifications`, `feat/store-domains`, `feat/health-check`, `feat/graceful-shutdown` and `feat/config` (5.3) were merged locally on 23 Oct (`go test ./...` passes), but **`main` is not pushed yet** (`origin/main` is still `42b034e`); pushing it marks the 4.7 PR merged. Next:
+- **Branches:** local `main` has everything through 4.7, 4.4b, 5.1–5.3, 5.6 and 5.7: `feat/order-notifications`, `feat/store-domains`, `feat/health-check`, `feat/graceful-shutdown`, `feat/config` (5.3), `feat/docker` (5.6, files only) and `feat/ci` (5.7) were merged locally on 23 Oct (`go test ./...` passes), but **`main` is not pushed yet** (`origin/main` is still `42b034e`); pushing it marks the 4.7 PR merged and starts the first CI run (5.6 and 5.7 get ticked once it passes). Next:
   1. Push `main` (`git push origin main`).
   2. Then follow this order (decided 23 Oct; it overrides "top to bottom" for sections 5 and 6), so each step gives something usable:
      1. **Section 5 essentials:** ~~5.2 shutdown + timeouts~~, ~~5.3 config~~ (done), 5.6 Docker (files written, not built), 5.8 deploy + backups (enough to run the API for real).
@@ -154,7 +154,9 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
   - `Dockerfile`: Go 1.25.1 build → `distroless/static` (CA certificates for Bachs/SMTP/Cloudinary, non-root, no shell), with `doc/swagger.json` for the Swagger UI. `.dockerignore` keeps `.env` and `.git` out of the image.
   - `docker-compose.yml`: `postgres:16` and `redis:7` (data in volumes, not published to the host), a one-shot `migrate` service that applies `db/migrations` before the API starts, and the API on port 8080 with settings from `.env` (DB/Redis addresses overridden to the services) and `stop_grace_period: 50s` (5.2).
   - Watch for: a `DB_PASSWORD` with `@ : /` must be URL-encoded in the migrate URL; if Compose rejects `.env`'s `KEY = value` spacing, use `KEY=value`.
-- [ ] **5.7 CI** — `go vet`, `go test`, build on every push.
+- [ ] **5.7 CI** — `.github/workflows/ci.yml` on `feat/ci` (23 Oct), runs on GitHub's machines for every push and pull request; **tick once the first run on GitHub passes** (it can't run before `main`/the branch is pushed).
+  - Job **test**: Postgres 16 service, `go build`, `go vet`, `go test ./...` with `TEST_REQUIRE_DB=1` (new in `testutil`: a missing database fails the run instead of skipping the DB tests), and the Swagger validator.
+  - Job **docker**: builds the image, writes a throwaway `.env`, checks `docker-compose.yml`, starts the whole stack (Postgres, Redis, migrations, API) and waits for `/healthz` to answer. This is what verifies 5.6; logs are printed if it fails.
 - [ ] **5.8 Deploy + backups** — managed Postgres with daily backups, logs collected.
 - [ ] **5.9 Repo cleanup** — remove committed `main.exe`, add it to `.gitignore`.
 

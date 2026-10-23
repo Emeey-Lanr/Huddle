@@ -1,0 +1,105 @@
+# Runs on GitHub's machines for every push and pull request.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch cancels the run still going for the older one.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Vet, test and check Swagger
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: huddle_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Key=value form: tests append search_path to it.
+      TEST_DATABASE_URL: host=localhost user=postgres password=postgres dbname=huddle_test port=5432 sslmode=disable
+      # Fail, don't skip, if the database tests can't reach Postgres.
+      TEST_REQUIRE_DB: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate doc/swagger.json
+        run: |
+          pip install openapi-spec-validator
+          python -m openapi_spec_validator doc/swagger.json
+
+  docker:
+    name: Build the image and start the stack
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image
+        run: docker build -t huddle-api:ci .
+
+      # Throwaway settings: compose needs a .env, and the real one is never in the repo.
+      - name: Write a CI .env
+        run: |
+          cat > .env <<'EOF'
+          APP_ENV=development
+          SECRET_KEY=ci-only-secret
+          DB_USER=huddle
+          DB_PASSWORD=ci-only-password
+          DB_NAME=huddle
+          EOF
+
+      - name: Check docker-compose.yml
+        run: docker compose config -q
+
+      - name: Start Postgres, Redis, migrations and the API
+        run: docker compose up -d --build
+
+      - name: Wait for /healthz
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/healthz; then echo; exit 0; fi
+            sleep 2
+          done
+          echo "The API did not become healthy within 2 minutes"
+          exit 1
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Stop the stack
+        if: always()
+        run: docker compose down -v

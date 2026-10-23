@@ -76,6 +76,10 @@ func NewDB(t *testing.T) *gorm.DB {
 		err = admin.Exec("SELECT 1").Error
 	}
 	if err != nil {
+		// CI sets TEST_REQUIRE_DB so a missing database fails the run instead of skipping half the tests.
+		if os.Getenv("TEST_REQUIRE_DB") != "" {
+			t.Fatalf("Postgres not available for tests: %v", err)
+		}
 		t.Skipf("Postgres not available for tests (set TEST_DATABASE_URL or create huddle_test): %v", err)
 	}
 
