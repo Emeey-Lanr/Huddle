@@ -4,69 +4,60 @@ import (
 	"context"
 	"mime/multipart"
 	"os"
+	"sync"
+	"time"
 
 	"github.com/cloudinary/cloudinary-go/v2"
 	"github.com/cloudinary/cloudinary-go/v2/api"
-
-	// "github.com/cloudinary/cloudinary-go/v2/api/admin"
-
-	"fmt"
-
 	"github.com/cloudinary/cloudinary-go/v2/api/uploader"
 )
 
+const (
+	// Uploads come from sellers on slow mobile data; deletes are quick.
+	uploadTimeout = 60 * time.Second
+	deleteTimeout = 20 * time.Second
+)
 
-
-func CloudinaryInit ()(*cloudinary.Cloudinary,context.Context, error ){
- cld, err := cloudinary.NewFromURL(os.Getenv("CLOUDINARY_URL"))
- if err != nil{
-	return nil, nil, err
- }
-
- cld.Config.URL.Secure = true
-ctx := context.Background()
-return cld, ctx, err
-
-}
-
-
-func UploadImageToCloudinary (image *multipart.FileHeader, id string)(*uploader.UploadResult, error){
-	cloudinary, ctx, err := CloudinaryInit()
-	if err != nil{
-		return nil,  err
+// client is created once, on first use, from CLOUDINARY_URL; a bad URL is
+// remembered and returned to every caller.
+var client = sync.OnceValues(func() (*cloudinary.Cloudinary, error) {
+	cld, err := cloudinary.NewFromURL(os.Getenv("CLOUDINARY_URL"))
+	if err != nil {
+		return nil, err
 	}
+	cld.Config.URL.Secure = true
+	return cld, nil
+})
 
-  file, err := image.Open()
-  if err != nil{
-	return nil, err
-  }
-  defer file.Close()
-
-resp, err := cloudinary.Upload.Upload(ctx, file,uploader.UploadParams{
-		PublicID:id,
-	    UniqueFilename: api.Bool(false),
-		Overwrite:      api.Bool(true),
-	} )
-	if err != nil{
+func UploadImageToCloudinary(image *multipart.FileHeader, id string) (*uploader.UploadResult, error) {
+	cld, err := client()
+	if err != nil {
 		return nil, err
 	}
 
-fmt.Println(resp)
-return resp, nil
+	file, err := image.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), uploadTimeout)
+	defer cancel()
+	return cld.Upload.Upload(ctx, file, uploader.UploadParams{
+		PublicID:       id,
+		UniqueFilename: api.Bool(false),
+		Overwrite:      api.Bool(true),
+	})
 }
 
-func DeleteImageFromCloudinary (id string)(error){
-	cloudinary, ctx, err := CloudinaryInit()
-	if err != nil{
+func DeleteImageFromCloudinary(id string) error {
+	cld, err := client()
+	if err != nil {
 		return err
 	}
 
-	_, err = cloudinary.Upload.Destroy(ctx, uploader.DestroyParams{
-		PublicID: id,
-	})
-	if err != nil{
-		return err
-	}
-
-	return nil
+	ctx, cancel := context.WithTimeout(context.Background(), deleteTimeout)
+	defer cancel()
+	_, err = cld.Upload.Destroy(ctx, uploader.DestroyParams{PublicID: id})
+	return err
 }
