@@ -6,16 +6,19 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"huddle/db/connection"
 	"huddle/pkg/audit"
+	"huddle/pkg/config"
 	"huddle/pkg/mail"
 	"huddle/pkg/router"
 	"huddle/pkg/services/notification"
 	"huddle/pkg/services/order"
 
+	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 )
 
@@ -26,8 +29,17 @@ func main() {
 		log.Println("Note: .env file not loaded, falling back to environment variables:", err)
 	}
 
-	if os.Getenv("SECRET_KEY") == "" {
-		log.Fatal("SECRET_KEY must be set (in .env or the environment) to sign auth tokens")
+	// Stop now on a bad setting rather than misbehave later. Messages name
+	// settings, never their values.
+	problems, warnings := config.Check(os.Getenv)
+	for _, w := range warnings {
+		log.Printf("Warning: %s", w)
+	}
+	if len(problems) > 0 {
+		log.Fatalf("Fix these settings (in .env or the environment) before starting:\n- %s", strings.Join(problems, "\n- "))
+	}
+	if config.IsProduction(os.Getenv) {
+		gin.SetMode(gin.ReleaseMode)
 	}
 
 	db := connection.ConnectToDb()
@@ -48,11 +60,12 @@ func main() {
 		workers = append(workers, notification.StartWorker(ctx, db, sender, time.Minute))
 	}
 
-	ln, err := net.Listen("tcp", ":8080")
+	port := config.Port(os.Getenv)
+	ln, err := net.Listen("tcp", ":"+port)
 	if err != nil {
 		log.Fatalf("Server startup failed: %v", err)
 	}
-	log.Println("Huddle E-Commerce API running on port :8080")
+	log.Printf("Huddle E-Commerce API running on port :%s", port)
 	if err := serve(ctx, newHTTPServer(router.RoutesSetup(db, rdb)), ln, shutdownTimeout); err != nil {
 		log.Fatalf("Server stopped with an error: %v", err)
 	}

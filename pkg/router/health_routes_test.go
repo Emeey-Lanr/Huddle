@@ -59,3 +59,33 @@ func TestHealthz_PostgresDown(t *testing.T) {
 		t.Errorf("healthz: %d %v, want 503 with postgres down", code, checks)
 	}
 }
+
+func clientIP(t *testing.T, proxies, remoteAddr, forwardedFor string) string {
+	t.Helper()
+	t.Setenv("TRUSTED_PROXIES", proxies)
+	gin.SetMode(gin.TestMode)
+	r := RoutesSetup(nil, nil)
+	r.GET("/test-client-ip", func(c *gin.Context) { c.String(http.StatusOK, c.ClientIP()) })
+
+	req := httptest.NewRequest(http.MethodGet, "/test-client-ip", nil)
+	req.RemoteAddr = remoteAddr
+	req.Header.Set("X-Forwarded-For", forwardedFor)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	return w.Body.String()
+}
+
+func TestClientIP_OnlyTrustedProxiesMayForward(t *testing.T) {
+	// Without TRUSTED_PROXIES a client can't pick its own IP (e.g. to dodge the rate limiter).
+	if ip := clientIP(t, "", "203.0.113.7:5000", "1.2.3.4"); ip != "203.0.113.7" {
+		t.Errorf("no trusted proxies: client IP %q, want the connecting address", ip)
+	}
+	// Behind a trusted load balancer, the forwarded address is the client's.
+	if ip := clientIP(t, "10.0.0.0/8", "10.0.0.5:5000", "203.0.113.7"); ip != "203.0.113.7" {
+		t.Errorf("trusted proxy: client IP %q, want the forwarded address", ip)
+	}
+	// Someone else forwarding is still not believed.
+	if ip := clientIP(t, "10.0.0.0/8", "198.51.100.9:5000", "1.2.3.4"); ip != "198.51.100.9" {
+		t.Errorf("untrusted sender: client IP %q, want the connecting address", ip)
+	}
+}
