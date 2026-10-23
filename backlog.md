@@ -11,7 +11,7 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
 - **Branches:** local `main` has everything through 4.7, 4.4b, 5.1, 5.2 and 5.3: `feat/order-notifications`, `feat/store-domains`, `feat/health-check`, `feat/graceful-shutdown` and `feat/config` (5.3) were merged locally on 23 Oct (`go test ./...` passes), but **`main` is not pushed yet** (`origin/main` is still `42b034e`); pushing it marks the 4.7 PR merged. Next:
   1. Push `main` (`git push origin main`).
   2. Then follow this order (decided 23 Oct; it overrides "top to bottom" for sections 5 and 6), so each step gives something usable:
-     1. **Section 5 essentials:** ~~5.2 shutdown + timeouts~~, ~~5.3 config~~ (done), 5.6 Docker, 5.8 deploy + backups (enough to run the API for real).
+     1. **Section 5 essentials:** ~~5.2 shutdown + timeouts~~, ~~5.3 config~~ (done), 5.6 Docker (files written, not built), 5.8 deploy + backups (enough to run the API for real).
      2. **6.2 Customer website (storefront template) + theme settings:** sellers can take real orders; the team sets each store's theme by hand at first. Onboard the first real sellers here and learn what they need.
      3. **6.1 phone login + 6.5 WhatsApp bot:** sellers run their shop from WhatsApp.
      4. **AI (6.3, 6.4, 6.6) + 6.7 preview:** the AI takes over the theming and content the team did by hand.
@@ -150,7 +150,10 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
   - The local `.env` passes the check (development, port 8080, no problems).
 - [ ] **5.4 Cloudinary client created once** — not per upload (`internal/cloudinary/client.go`).
 - [ ] **5.5 Rate limiter in Redis** — so it works across more than one server.
-- [ ] **5.6 Dockerfile + docker-compose** — API, Postgres, Redis. Give the API `stop_grace_period: 50s` (see 5.2).
+- [ ] **5.6 Dockerfile + docker-compose** — files written on `feat/docker` (23 Oct), **not yet built**: Docker is not installed on the dev laptop (it would slow it down), so tick this once the image has been built and `docker compose up` checked, in CI (5.7) or on the server (5.8).
+  - `Dockerfile`: Go 1.25.1 build → `distroless/static` (CA certificates for Bachs/SMTP/Cloudinary, non-root, no shell), with `doc/swagger.json` for the Swagger UI. `.dockerignore` keeps `.env` and `.git` out of the image.
+  - `docker-compose.yml`: `postgres:16` and `redis:7` (data in volumes, not published to the host), a one-shot `migrate` service that applies `db/migrations` before the API starts, and the API on port 8080 with settings from `.env` (DB/Redis addresses overridden to the services) and `stop_grace_period: 50s` (5.2).
+  - Watch for: a `DB_PASSWORD` with `@ : /` must be URL-encoded in the migrate URL; if Compose rejects `.env`'s `KEY = value` spacing, use `KEY=value`.
 - [ ] **5.7 CI** — `go vet`, `go test`, build on every push.
 - [ ] **5.8 Deploy + backups** — managed Postgres with daily backups, logs collected.
 - [ ] **5.9 Repo cleanup** — remove committed `main.exe`, add it to `.gitignore`.

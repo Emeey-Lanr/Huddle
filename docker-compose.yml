@@ -1,0 +1,71 @@
+# Runs the API with its own Postgres and Redis:
+#   docker compose up --build
+# Settings come from .env (DB_USER, DB_PASSWORD, DB_NAME, SECRET_KEY, Bachs,
+# SMTP, ...). Database and Redis addresses are set here to the services below.
+# The API is at http://localhost:8080 (health: /healthz).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    # Redis is only reachable inside this network, so it has no password here.
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # Applies db/migrations, then exits. The API starts only if it succeeds.
+  migrate:
+    image: migrate/migrate:v4.17.1
+    volumes:
+      - ./db/migrations:/migrations:ro
+    # A DB_PASSWORD with characters like @ : / must be URL-encoded here.
+    command: ["-path", "/migrations", "-database", "postgres://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}?sslmode=disable", "up"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build: .
+    env_file: .env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_SSLMODE: disable
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ""
+      PORT: "8080"
+    ports:
+      - "8080:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    # The API gives requests in progress up to 45 s to finish when stopped
+    # (5.2); Docker's default of 10 s would cut them off.
+    stop_grace_period: 50s
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  redis-data:
