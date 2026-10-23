@@ -148,7 +148,7 @@ Database tests use your local Postgres: a separate `huddle_test` database (never
   - **Warns in production:** `DB_SSLMODE` unset/`disable`, no `TRUSTED_PROXIES`, no `CORS_ALLOWED_ORIGINS`, no SMTP, no `CLOUDINARY_URL`.
   - **New settings:** `DB_SSLMODE` (default `disable`; managed Postgres usually needs `require`) and `TRUSTED_PROXIES` (IPs/CIDRs of the load balancer). **Security fix:** Gin believed `X-Forwarded-For` from anyone, so a client could fake its IP and dodge the sign-in rate limiter; now only `TRUSTED_PROXIES` may set it, otherwise the connecting address is used. Set it in production behind a proxy, or every client shares the proxy's IP for rate limiting.
   - The local `.env` passes the check (development, port 8080, no problems).
-- [ ] **5.4 Cloudinary client created once** — not per upload (`internal/cloudinary/client.go`).
+- [x] **5.4 Cloudinary client created once** — built on first use from `CLOUDINARY_URL` and reused (`sync.OnceValues`; a bad URL is remembered). Uploads now time out after 60 s and deletes after 20 s (they had no limit and could hang a request), and upload results are no longer printed to the console.
 - [ ] **5.5 Rate limiter in Redis** — so it works across more than one server.
 - [x] **5.6 Dockerfile + docker-compose** — verified by the first CI run on 23 Oct (run 39982189277): the image built and the whole stack started with `/healthz` answering. Docker is not installed on the dev laptop (it would slow it down); CI builds and starts it on every push.
   - `Dockerfile`: Go 1.25.1 build → `distroless/static` (CA certificates for Bachs/SMTP/Cloudinary, non-root, no shell), with `doc/swagger.json` for the Swagger UI. `.dockerignore` keeps `.env` and `.git` out of the image.
