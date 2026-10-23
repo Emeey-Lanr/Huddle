@@ -2,6 +2,7 @@ package router
 
 import (
 	"huddle/doc"
+	"huddle/pkg/controller"
 	"huddle/pkg/middleware"
 	"huddle/pkg/storedomain"
 	"net/http"
@@ -26,6 +27,10 @@ func RoutesSetup(db *gorm.DB, rdb *redis.Client) *gin.Engine {
 	r.GET("/", func(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, gin.H{"name": "Welcome to Huddle E-commerce API"})
 	})
+
+	// For load balancers and uptime monitors: 200 when Postgres and Redis answer, 503 otherwise.
+	health := &controller.HealthController{Db: db, Redis: rdb}
+	r.GET("/healthz", health.Check)
 
 	// Registered Route Groups
 	AdminRouter(r, db, rdb)
