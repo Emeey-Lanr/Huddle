@@ -8,7 +8,9 @@ import (
 
 	"huddle/db/connection"
 	"huddle/pkg/audit"
+	"huddle/pkg/mail"
 	"huddle/pkg/router"
+	"huddle/pkg/services/notification"
 	"huddle/pkg/services/order"
 
 	"github.com/joho/godotenv"
@@ -30,6 +32,14 @@ func main() {
 
 	// Releases stock held by unpaid orders once their hold time passes.
 	order.StartExpiryWorker(context.Background(), db, time.Minute)
+
+	// Emails sellers about their paid orders. Without SMTP settings the
+	// emails stay queued and go out once it is configured.
+	if sender, err := mail.FromEnv(); err != nil {
+		log.Printf("Seller emails are not sent: %v", err)
+	} else {
+		notification.StartWorker(context.Background(), db, sender, time.Minute)
+	}
 
 	r := router.RoutesSetup(db, rdb)
 

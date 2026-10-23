@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"huddle/pkg/bachs"
 	"huddle/pkg/model"
+	"huddle/pkg/services/notification"
 	"huddle/pkg/services/order"
 	"huddle/pkg/utility"
 	"log"
@@ -243,6 +244,9 @@ func paid(tx *gorm.DB, e *bachs.Event, now time.Time) error {
 	if outcome != order.PaymentApplied {
 		log.Printf("bachs webhook %s: payment %s needs a refund (order could not take it)", e.Id, p.PublicId)
 		return setStatus(model.PaymentNeedsRefund)
+	}
+	if err := notification.QueueOrderPaid(tx, p.OrderId, now); err != nil {
+		return err
 	}
 	return setStatus(model.PaymentPaid)
 }

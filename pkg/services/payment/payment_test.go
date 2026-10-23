@@ -120,6 +120,13 @@ func (s *shop) stock() int {
 	return p.StockQuantity
 }
 
+// emailsQueued counts the "new paid order" emails queued for the store.
+func (s *shop) emailsQueued() int64 {
+	var n int64
+	s.db.Model(&model.Notifications{}).Where("kind = ?", model.NotificationOrderPaid).Count(&n)
+	return n
+}
+
 func event(id, typ, checkoutId, amount, account string) *bachs.Event {
 	return &bachs.Event{Id: id, Type: typ, Account: account, Data: bachs.EventData{
 		CheckoutId: checkoutId, PaymentStatus: "paid", Status: "completed", Amount: amount, Currency: "NGN",
@@ -271,6 +278,9 @@ func TestHandleEvent_PaysOrderOnce(t *testing.T) {
 	if events != 2 {
 		t.Errorf("%d events recorded, want 2", events)
 	}
+	if n := s.emailsQueued(); n != 1 {
+		t.Errorf("%d seller emails queued, want 1", n)
+	}
 
 	// Events that aren't ours, or aren't payments, are ignored.
 	s.handle(event("evt_3", "collection.succeeded", "chk_someone_else", "1.00", ""))
@@ -305,6 +315,9 @@ func TestHandleEvent_MismatchNeedsReview(t *testing.T) {
 			t.Errorf("%s: order = %s, want pending", name, st)
 		}
 	}
+	if n := s.emailsQueued(); n != 0 {
+		t.Errorf("%d seller emails queued for payments under review, want 0", n)
+	}
 }
 
 func TestHandleEvent_LatePayment(t *testing.T) {
@@ -330,6 +343,9 @@ func TestHandleEvent_LatePayment(t *testing.T) {
 	if got := s.stock(); got != 3 {
 		t.Errorf("stock = %d, want 3 (taken again)", got)
 	}
+	if n := s.emailsQueued(); n != 1 {
+		t.Errorf("%d seller emails queued for the revived order, want 1", n)
+	}
 
 	// The order expired and the stock was sold to someone else: refund.
 	gone := s.placeOrder(2, "")
@@ -347,6 +363,9 @@ func TestHandleEvent_LatePayment(t *testing.T) {
 	if got := s.stock(); got != 1 {
 		t.Errorf("stock = %d, want 1 (untouched)", got)
 	}
+	if n := s.emailsQueued(); n != 1 {
+		t.Errorf("%d seller emails queued, want still 1 (none for a payment to refund)", n)
+	}
 }
 
 func TestHandleEvent_SellerAlreadyMarkedPaid(t *testing.T) {
@@ -358,5 +377,9 @@ func TestHandleEvent_SellerAlreadyMarkedPaid(t *testing.T) {
 	s.handle(event("evt_1", "checkout.completed", s.payment(p.PaymentId).CheckoutId, "15000.00", ""))
 	if st := s.payment(p.PaymentId).Status; st != model.PaymentNeedsRefund {
 		t.Errorf("payment = %s, want needs_refund (paid twice)", st)
+	}
+	// The seller marked it paid themselves, so they already know.
+	if n := s.emailsQueued(); n != 0 {
+		t.Errorf("%d seller emails queued, want 0", n)
 	}
 }
