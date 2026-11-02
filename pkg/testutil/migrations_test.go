@@ -39,6 +39,7 @@ func TestMigrations_IndexesExist(t *testing.T) {
 		"order_items_order_idx", "payments_order_idx", "stores_bachs_account_unique",
 		"payments_store_status_idx", "refunds_payment_idx", "refunds_one_active_per_payment",
 		"notifications_kind_order_unique", "notifications_due_idx", "store_domains_domain_unique", "store_domains_store_idx",
+		"stores_slug_unique",
 	}
 	for _, name := range want {
 		var n int64

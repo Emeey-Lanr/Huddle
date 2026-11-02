@@ -122,6 +122,19 @@ func Migrate(t *testing.T, db *gorm.DB, direction string) {
 	}
 }
 
+// MigrateFile runs one migration file, such as "000015_store_slug.up.sql", to
+// test what it does to existing rows.
+func MigrateFile(t *testing.T, db *gorm.DB, name string) {
+	t.Helper()
+	sql, err := os.ReadFile(filepath.Join(repoRoot(), "db", "migrations", name))
+	if err != nil {
+		t.Fatalf("read %s: %v", name, err)
+	}
+	if err := db.Exec(string(sql)).Error; err != nil {
+		t.Fatalf("migration %s: %v", name, err)
+	}
+}
+
 func NewRedis(t *testing.T) (*miniredis.Miniredis, *redis.Client) {
 	t.Helper()
 	mr := miniredis.RunT(t)

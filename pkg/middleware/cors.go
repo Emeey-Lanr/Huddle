@@ -13,7 +13,7 @@ import (
 
 const (
 	corsAllowMethods = "GET, POST, PUT, DELETE, OPTIONS"
-	corsAllowHeaders = "Content-Type, Authorization, X-Store-Key, X-Store-Id"
+	corsAllowHeaders = "Content-Type, Authorization, X-Store-Key, X-Store-Host, X-Store-Id"
 )
 
 // CORSMiddleware lets browsers on allowed storefront origins call the API with

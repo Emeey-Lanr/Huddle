@@ -73,7 +73,7 @@
         "type": "apiKey",
         "in": "header",
         "name": "X-Store-Key",
-        "description": "The store's publishable key (the api_key returned once by POST /store/create)"
+        "description": "The store's publishable key (the api_key returned once by POST /store/create). Instead of this header, send X-Store-Host: the website's hostname, either <slug>.<STOREFRONT_BASE_DOMAIN> or one of the store's custom domains. An unknown host gets 404."
       }
     },
     "parameters": {
@@ -318,6 +318,11 @@
           "store_description": {
             "type": "string",
             "example": "Handmade ankara bags and accessories"
+          },
+          "slug": {
+            "type": "string",
+            "description": "The name in the store's web address",
+            "example": "chiomas-bags"
           },
           "created_at": {
             "type": "string",
@@ -1530,6 +1535,12 @@
                   "store_description": {
                     "type": "string",
                     "minLength": 10
+                  },
+                  "slug": {
+                    "type": "string",
+                    "maxLength": 40,
+                    "description": "Changes the store's web address; the old address stops working. Lowercase letters, numbers and dashes.",
+                    "example": "chioma-couture"
                   }
                 }
               }
@@ -1573,7 +1584,7 @@
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
-            "description": "You already have a store with this name (case-insensitive)",
+            "description": "You already have a store with this name (case-insensitive), or the store address is taken",
             "content": {
               "application/json": {
                 "schema": {
