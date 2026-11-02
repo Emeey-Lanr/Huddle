@@ -1,23 +1,40 @@
-/* Layout, then motion. Each store's colours arrive as --primary, --accent and
-   --ink; everything else is derived from them, so no two shops look alike. */
+/* The store's colour is the page. --ground and --on come from its theme;
+   everything else derives from --bg and --fg, so the same rules draw a flooded
+   shop and the white bag and checkout pages. */
 
 :root {
-  --paper: color-mix(in srgb, var(--accent) 5%, #fbfaf6);
-  --tile: color-mix(in srgb, var(--accent) 16%, #efece4);
-  --line: color-mix(in srgb, var(--ink) 16%, transparent);
-  --muted: color-mix(in srgb, var(--ink) 62%, var(--paper));
   --gutter: 16px;
-  --bar: 56px;
-  --target: 5.6; /* the shrunken name's size in vw */
+  --bar: 52px;
+  --target: 7; /* the shrunken name's size in vw */
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 @media (min-width: 768px) {
   :root {
     --gutter: 28px;
-    --target: 2;
-    --k-max: 1;
+    --k: var(--wide-k);
+    --target: 2.4;
   }
+}
+
+.flood {
+  --bg: var(--ground);
+  --fg: var(--on);
+}
+
+/* Near-black text: a page of red or orange type next to "Pay" reads as an error.
+   The store's colour stays on the bar, the heading and the buttons. */
+.plain {
+  --bg: #ffffff;
+  --fg: #111111;
+}
+
+html {
+  --line: color-mix(in srgb, var(--fg) 30%, transparent);
+  --muted: color-mix(in srgb, var(--fg) 82%, var(--bg));
+  --tile: color-mix(in srgb, var(--fg) 12%, var(--bg));
+  -webkit-text-size-adjust: 100%;
+  background: var(--bg);
 }
 
 *,
@@ -26,18 +43,13 @@
   box-sizing: border-box;
 }
 
-html {
-  -webkit-text-size-adjust: 100%;
-  background: var(--paper);
-}
-
 body {
   margin: 0;
   font-family: var(--font);
   font-size: 16px;
-  line-height: 1.5;
-  color: var(--ink);
-  background: var(--paper);
+  line-height: 1.45;
+  color: var(--fg);
+  background: var(--bg);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -63,12 +75,13 @@ button {
   color: inherit;
   cursor: pointer;
   border: 0;
+  border-radius: 0;
   background: none;
 }
 
 :focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 3px;
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
 }
 
 .sr-only {
@@ -80,7 +93,14 @@ button {
   white-space: nowrap;
 }
 
-/* Bar */
+.display {
+  font-family: var(--display);
+  font-weight: var(--display-weight);
+  text-transform: var(--display-case);
+  letter-spacing: -0.01em;
+}
+
+/* Bar: the store's colour on every page, including checkout. */
 
 .bar {
   position: sticky;
@@ -91,65 +111,89 @@ button {
   justify-content: space-between;
   height: var(--bar);
   padding: 0 var(--gutter);
-  background: var(--paper);
+  color: var(--on);
+  background: var(--ground);
+  border-bottom: 1px solid color-mix(in srgb, var(--on) 30%, transparent);
 }
 
 .bar-name {
-  font-weight: 800;
-  letter-spacing: -0.02em;
   max-width: 70vw;
   overflow: hidden;
+  font-family: var(--display);
+  font-size: 20px;
+  font-weight: var(--display-weight);
+  text-transform: var(--display-case);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
 .bag {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
   font-size: 15px;
   font-weight: 500;
 }
 
 .bag-count {
-  display: inline-grid;
+  display: grid;
   place-items: center;
-  min-width: 24px;
-  height: 24px;
+  min-width: 26px;
+  height: 26px;
   padding: 0 6px;
-  margin-left: 4px;
-  border-radius: 999px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
-  color: var(--on-primary);
-  background: var(--primary);
+  color: var(--ground);
+  background: var(--on);
 }
 
-/* The store name is the hero */
+/* The store name is the hero. */
 
 .wordmark {
   display: block;
-  padding: 0 var(--gutter);
+  overflow: clip;
+  padding: 10px var(--gutter) 0;
+  font-family: var(--display);
   font-size: calc(var(--k) * 1vw);
-  font-weight: 800;
-  line-height: 0.95;
-  letter-spacing: -0.045em;
+  font-weight: var(--display-weight);
+  line-height: 1.12;
+  text-transform: var(--display-case);
   white-space: nowrap;
-  color: var(--ink);
+  color: var(--on);
 }
 
-.hero {
-  padding: 28px var(--gutter) 0;
+.wordmark span {
+  display: block;
+}
+
+/* A name too long to fill one line stacks instead, and stays put. */
+.hero-name,
+.foot-name--long {
+  font-family: var(--display);
+  font-size: clamp(46px, 13.5vw, 130px);
+  font-weight: var(--display-weight);
+  line-height: 1.04;
+  text-transform: var(--display-case);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.hero-name {
+  padding: 14px var(--gutter) 0;
 }
 
 .hero-about {
-  max-width: 34ch;
-  font-size: 18px;
-  line-height: 1.35;
+  max-width: 32ch;
+  padding: 18px var(--gutter) 22px;
+  font-size: 19px;
+  line-height: 1.3;
 }
 
 .hero-banner {
-  margin-top: 24px;
   overflow: hidden;
-  border-radius: 20px;
   aspect-ratio: 4 / 5;
+  border-top: 1px solid var(--line);
   background: var(--tile);
 }
 
@@ -160,33 +204,50 @@ button {
 }
 
 @media (min-width: 768px) {
+  .hero-about {
+    max-width: 44ch;
+    font-size: 22px;
+  }
+
   .hero-banner {
-    aspect-ratio: 16 / 8;
+    aspect-ratio: 16 / 7;
   }
 }
 
-/* Products. Every fifth piece runs full width, so the page has a rhythm
-   instead of an even catalogue grid. */
+/* Products sit in a ruled grid, edge to edge, like a printed catalogue. Every
+   fifth runs full width; a last piece with a gap beside it fills the row. */
 
 .grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 28px 12px;
-  padding: 40px var(--gutter) 64px;
+  gap: 1px;
+  background: var(--line);
+  border-block: 1px solid var(--line);
 }
 
-.grid > :nth-child(5n + 1) {
+.grid > :nth-child(5n + 1),
+.grid > :last-child:nth-child(5n + 2),
+.grid > :last-child:nth-child(5n + 4) {
   grid-column: 1 / -1;
 }
 
 @media (min-width: 768px) {
   .grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 44px 20px;
   }
 
-  .grid > :nth-child(5n + 1) {
+  .grid > :nth-child(n) {
+    grid-column: auto;
+  }
+
+  .grid > :nth-child(5n + 1),
+  .grid > :last-child:nth-child(5n + 4) {
     grid-column: span 2;
+  }
+
+  .grid > :last-child:nth-child(5n + 1),
+  .grid > :last-child:nth-child(5n + 3) {
+    grid-column: 1 / -1;
   }
 
   /* Wide enough to match the height of the 4:5 card beside it. */
@@ -198,20 +259,20 @@ button {
 .card {
   position: relative;
   min-width: 0;
+  background: var(--bg);
 }
 
 .card-link {
   display: block;
 }
 
-/* One crop and one tinted tile for every photo, so phone pictures sit together. */
+/* One crop for every photo, so phone pictures sit together. */
 .tile {
   position: relative;
   display: grid;
   place-items: center;
   overflow: hidden;
   aspect-ratio: 4 / 5;
-  border-radius: 14px;
   background: var(--tile);
 }
 
@@ -222,10 +283,12 @@ button {
 }
 
 .tile-letter {
-  font-size: 96px;
-  font-weight: 800;
+  font-family: var(--display);
+  font-size: 110px;
+  font-weight: var(--display-weight);
   line-height: 1;
-  color: color-mix(in srgb, var(--accent) 45%, var(--tile));
+  text-transform: var(--display-case);
+  color: color-mix(in srgb, var(--fg) 34%, var(--tile));
 }
 
 .card-text {
@@ -233,7 +296,7 @@ button {
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 2px 12px;
-  padding-top: 10px;
+  padding: 10px 12px 14px;
 }
 
 .card-text h2 {
@@ -249,27 +312,34 @@ button {
 
 .quick-add {
   position: absolute;
-  right: 8px;
-  top: 8px;
+  top: 0;
+  right: 0;
   display: grid;
   place-items: center;
   width: 44px;
   height: 44px;
-  border-radius: 50%;
   font-size: 24px;
   line-height: 1;
-  background: var(--paper);
-  transition: transform 0.25s var(--ease), background-color 0.25s, color 0.25s;
+  color: var(--fg);
+  background: var(--bg);
+  transition: background-color 0.2s, color 0.2s;
 }
 
-.quick-add:active {
-  transform: scale(0.88);
+.quick-add span {
+  transition: transform 0.35s var(--ease);
+}
+
+.quick-add:active span {
+  transform: scale(0.8);
 }
 
 .quick-add.is-added {
-  color: var(--on-primary);
-  background: var(--primary);
-  transform: rotate(90deg);
+  color: var(--on-flash);
+  background: var(--flash);
+}
+
+.quick-add.is-added span {
+  transform: rotate(180deg);
 }
 
 .empty {
@@ -292,36 +362,44 @@ button {
 
 .gallery .tile {
   flex: 0 0 100%;
-  border-radius: 0;
   scroll-snap-align: start;
 }
 
 .pdp-text {
-  padding: 24px var(--gutter) 120px;
+  padding: 20px var(--gutter) 110px;
+  border-top: 1px solid var(--line);
 }
 
 .pdp-text h1 {
-  font-size: clamp(32px, 9vw, 56px);
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: -0.035em;
+  font-family: var(--display);
+  font-size: clamp(44px, 15vw, 88px);
+  font-weight: var(--display-weight);
+  line-height: 1.05;
+  text-transform: var(--display-case);
 }
 
 .pdp-price {
-  margin-top: 12px;
-  font-size: 20px;
+  margin-top: 10px;
+  font-size: 21px;
+  font-weight: 500;
 }
 
 .pdp-stock {
-  margin-top: 4px;
-  font-size: 15px;
-  color: var(--muted);
+  display: inline-block;
+  margin-top: 10px;
+  padding: 2px 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--on-flash);
+  background: var(--flash);
 }
 
 .pdp-about {
   max-width: 56ch;
-  margin-top: 24px;
+  margin-top: 22px;
+  padding-top: 16px;
   white-space: pre-line;
+  border-top: 1px solid var(--line);
 }
 
 /* Thumb reach: the main action stays at the bottom of the screen. */
@@ -331,36 +409,35 @@ button {
   right: 0;
   bottom: 0;
   z-index: 10;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 10px var(--gutter) max(10px, env(safe-area-inset-bottom));
-  background: var(--paper);
+  display: grid;
+  grid-template-columns: 2fr 3fr;
+  align-items: stretch;
+  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--bg);
   border-top: 1px solid var(--line);
 }
 
 .buy-price {
+  align-self: center;
+  padding: 0 var(--gutter);
   font-weight: 500;
 }
 
 .buy-button {
-  min-width: 170px;
-  min-height: 52px;
-  padding: 0 24px;
-  border-radius: 999px;
+  min-height: 60px;
   font-weight: 700;
-  color: var(--on-primary);
-  background: var(--primary);
-  transition: transform 0.2s var(--ease), opacity 0.2s;
+  color: var(--bg);
+  background: var(--fg);
+  transition: background-color 0.2s, color 0.2s;
 }
 
-.buy-button:active {
-  transform: scale(0.97);
+.buy-button.is-added {
+  color: var(--on-flash);
+  background: var(--flash);
 }
 
 .buy-button:disabled {
-  opacity: 0.45;
+  opacity: 0.5;
   cursor: default;
 }
 
@@ -369,47 +446,47 @@ button {
     display: grid;
     grid-template-columns: 55% 1fr;
     align-items: start;
-    gap: 0 40px;
   }
 
   .gallery {
     display: block;
     overflow: visible;
+    border-right: 1px solid var(--line);
   }
 
   .gallery .tile + .tile {
-    margin-top: 6px;
+    border-top: 1px solid var(--line);
   }
 
   .pdp-text {
     position: sticky;
     top: var(--bar);
-    padding: 40px var(--gutter) 140px 0;
+    padding: 32px var(--gutter) 120px;
+    border-top: 0;
   }
 
   .buy {
     left: 55%;
-    right: 0;
-    border-top: 0;
-    padding-left: 40px;
   }
 }
 
-/* Bag, checkout and orders: plain and fast, one column at any width. */
+/* Bag, checkout and orders: white and plain, one column at any width. */
 
 .page {
   width: 100%;
   max-width: 560px;
   margin: 0 auto;
-  padding: 16px var(--gutter) 72px;
+  padding: 20px var(--gutter) 72px;
 }
 
 .page h1 {
-  margin-bottom: 20px;
-  font-size: clamp(32px, 9vw, 44px);
-  font-weight: 800;
-  line-height: 1.05;
-  letter-spacing: -0.035em;
+  margin-bottom: 18px;
+  font-family: var(--display);
+  font-size: clamp(38px, 11vw, 54px);
+  font-weight: var(--display-weight);
+  line-height: 1.08;
+  text-transform: var(--display-case);
+  color: var(--ink);
 }
 
 .page-lead {
@@ -420,8 +497,7 @@ button {
 .notice {
   margin-bottom: 20px;
   padding: 12px 14px;
-  border-radius: 10px;
-  color: var(--ink);
+  border-left: 3px solid var(--fg);
   background: var(--tile);
 }
 
@@ -429,17 +505,15 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 52px;
+  min-height: 56px;
   padding: 0 28px;
-  border-radius: 999px;
   font-weight: 700;
-  color: var(--on-primary);
-  background: var(--primary);
-  transition: transform 0.2s var(--ease), opacity 0.2s;
+  color: var(--on);
+  background: var(--ground);
 }
 
 .button:active {
-  transform: scale(0.98);
+  opacity: 0.85;
 }
 
 .button:disabled {
@@ -463,6 +537,7 @@ button {
   margin: 0;
   padding: 0;
   list-style: none;
+  border-top: 1px solid var(--line);
 }
 
 .line {
@@ -472,13 +547,8 @@ button {
   border-bottom: 1px solid var(--line);
 }
 
-.line:first-child {
-  padding-top: 0;
-}
-
 .line-tile {
   flex: 0 0 96px;
-  border-radius: 10px;
 }
 
 .tile-letter--small {
@@ -561,18 +631,18 @@ button {
   min-height: 52px;
   margin-top: 6px;
   padding: 12px 14px;
-  border: 1px solid color-mix(in srgb, var(--ink) 34%, transparent);
-  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--fg) 45%, transparent);
+  border-radius: 0;
   font: inherit;
   font-size: 16px;
-  color: var(--ink);
+  color: var(--fg);
   background: #fff;
 }
 
 .choice {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 0;
   margin-bottom: 16px;
 }
 
@@ -589,22 +659,24 @@ button {
   display: grid;
   place-items: center;
   min-height: 52px;
-  border: 1px solid color-mix(in srgb, var(--ink) 34%, transparent);
-  border-radius: 10px;
+  border: 1px solid var(--fg);
   font-size: 16px;
   font-weight: 500;
   transition: background-color 0.2s, color 0.2s;
 }
 
+.choice label + label span {
+  border-left: 0;
+}
+
 .choice input:checked + span {
-  color: var(--on-primary);
-  border-color: var(--primary);
-  background: var(--primary);
+  color: var(--on);
+  background: var(--ground);
 }
 
 .choice input:focus-visible + span {
-  outline: 2px solid var(--ink);
-  outline-offset: 3px;
+  outline: 2px solid var(--fg);
+  outline-offset: 2px;
 }
 
 /* Pickup needs no address. */
@@ -664,34 +736,39 @@ button {
 
 .foot {
   overflow: hidden;
-  padding: 40px var(--gutter) 24px;
-  border-top: 1px solid var(--line);
+  padding: 24px var(--gutter) 16px;
 }
 
 .foot-name {
+  font-family: var(--display);
   font-size: calc(var(--k) * 1vw);
-  font-weight: 800;
-  line-height: 0.95;
-  letter-spacing: -0.045em;
+  font-weight: var(--display-weight);
+  line-height: 1.12;
+  text-transform: var(--display-case);
   white-space: nowrap;
 }
 
+.foot-name.foot-name--long {
+  font-size: clamp(46px, 13.5vw, 130px);
+  line-height: 1.04;
+  white-space: normal;
+}
+
 .pdp ~ * {
-  padding-bottom: 96px;
+  padding-bottom: 76px;
 }
 
 .toast {
   position: fixed;
   left: 50%;
-  bottom: 88px;
+  bottom: 76px;
   z-index: 20;
   width: max-content;
   max-width: calc(100vw - 32px);
   padding: 10px 16px;
-  border-radius: 12px;
   font-size: 15px;
-  color: var(--paper);
-  background: var(--ink);
+  color: var(--bg);
+  background: var(--fg);
   opacity: 0;
   pointer-events: none;
   transform: translate(-50%, 12px);
@@ -714,16 +791,27 @@ button {
 }
 
 ::view-transition-group(*) {
-  animation-duration: 0.42s;
+  animation-duration: 0.45s;
   animation-timing-function: var(--ease);
 }
 
 ::view-transition-old(root),
 ::view-transition-new(root) {
-  animation-duration: 0.22s;
+  animation-duration: 0.2s;
 }
 
 @media (prefers-reduced-motion: no-preference) {
+  /* The name rises into place when the page opens. */
+  .wordmark span {
+    animation: name-in 0.8s var(--ease) both;
+  }
+
+  @keyframes name-in {
+    from {
+      transform: translateY(105%);
+    }
+  }
+
   @supports (animation-timeline: scroll()) {
     /* The giant name shrinks into the bar as the page scrolls. */
     .has-wordmark .bar-name {
@@ -731,7 +819,7 @@ button {
     }
 
     .has-wordmark .hero {
-      padding-top: calc(var(--k) * 0.95vw + 28px);
+      padding-top: calc(var(--k) * 1.12vw + 10px);
     }
 
     .wordmark {
@@ -744,15 +832,15 @@ button {
       animation: name-shrink linear both;
       animation-timeline: scroll(root);
       /* Done before the banner reaches the bar, at any name length or width. */
-      animation-range: 0 calc(var(--k) * 2.2vw + 40px);
+      animation-range: 0 calc(var(--k) * 1.1vw + 60px);
     }
 
     @keyframes name-shrink {
       from {
-        transform: translate(var(--gutter), calc(var(--bar) + 4px));
+        transform: translate(var(--gutter), calc(var(--bar) + 8px));
       }
       to {
-        transform: translate(var(--gutter), 14px) scale(calc(var(--target) / var(--k)));
+        transform: translate(var(--gutter), calc((var(--bar) - var(--target) * 1.12vw) / 2)) scale(calc(var(--target) / var(--k)));
       }
     }
 
@@ -760,40 +848,67 @@ button {
     .hero-banner img {
       animation: banner-settle linear both;
       animation-timeline: view();
-      animation-range: entry 10% cover 60%;
+      animation-range: entry 0% cover 55%;
     }
 
     @keyframes banner-settle {
       from {
-        transform: scale(1.14);
+        transform: scale(1.16);
       }
       to {
         transform: scale(1);
       }
     }
 
-    /* Pieces rise in as they enter the screen. */
-    .card {
-      animation: rise linear both;
+    /* A curtain of the page's colour lifts off each photo. */
+    .card .tile::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: var(--bg);
+      animation: curtain linear both;
       animation-timeline: view();
-      animation-range: entry 0% entry 40%;
+      animation-range: entry 5% entry 75%;
     }
 
-    @keyframes rise {
+    @keyframes curtain {
+      from {
+        transform: translateY(0);
+      }
+      to {
+        transform: translateY(-101%);
+      }
+    }
+
+    .card-text {
+      animation: settle linear both;
+      animation-timeline: view();
+      animation-range: entry 30% entry 90%;
+    }
+
+    @keyframes settle {
       from {
         opacity: 0;
-        transform: translateY(28px);
       }
       to {
         opacity: 1;
-        transform: none;
       }
     }
 
+    /* The footer name slides in from the left as the page ends. */
     .foot-name {
-      animation: rise linear both;
+      animation: foot-in linear both;
       animation-timeline: view();
-      animation-range: entry 0% entry 80%;
+      animation-range: entry 0% entry 100%;
+    }
+
+    @keyframes foot-in {
+      from {
+        transform: translateX(-12%);
+      }
+      to {
+        transform: none;
+      }
     }
   }
 }

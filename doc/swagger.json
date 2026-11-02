@@ -379,6 +379,9 @@
           "font": {
             "type": "string",
             "enum": [
+              "anton",
+              "bricolage",
+              "fraunces",
               "system",
               "inter",
               "poppins",

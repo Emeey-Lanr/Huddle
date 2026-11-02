@@ -1,12 +1,12 @@
 ---
 import "../styles/shop.css";
-import { onColor, readableInk } from "../lib/format";
+import { inkOnWhite, onColor } from "../lib/format";
 
 interface Props {
   title?: string;
   description?: string;
   home?: boolean;
-  plain?: boolean; // bag, checkout, orders: no decoration between shopper and paying
+  plain?: boolean; // bag, checkout, orders: white, calm, nothing between shopper and paying
   refresh?: string;
 }
 
@@ -14,39 +14,48 @@ const { store, bagCount } = Astro.locals;
 const { title, description = store.store_description, home = false, plain = false, refresh } = Astro.props;
 const { theme } = store;
 
+// perEm is roughly how wide a letter is, so a name can fill the screen's width.
+const sans = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 const fonts = {
-  system: { family: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif', css: "" },
-  inter: { family: "Inter, system-ui, sans-serif", css: "Inter:wght@400;500;800" },
-  poppins: { family: "Poppins, system-ui, sans-serif", css: "Poppins:wght@400;500;800" },
-  lora: { family: "Lora, Georgia, serif", css: "Lora:wght@400;500;700" },
+  anton: { display: `Anton, Impact, ${sans}`, body: `Archivo, ${sans}`, css: ["Anton", "Archivo:wght@400;500;700"], weight: 400, upper: true, perEm: 0.46 },
+  bricolage: { display: `"Bricolage Grotesque", ${sans}`, body: `"Bricolage Grotesque", ${sans}`, css: ["Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,800"], weight: 800, upper: false, perEm: 0.55 },
+  fraunces: { display: "Fraunces, Georgia, serif", body: `Archivo, ${sans}`, css: ["Fraunces:opsz,wght@9..144,600", "Archivo:wght@400;500;700"], weight: 600, upper: false, perEm: 0.56 },
+  system: { display: sans, body: sans, css: [], weight: 800, upper: false, perEm: 0.58 },
+  inter: { display: `Inter, ${sans}`, body: `Inter, ${sans}`, css: ["Inter:wght@400;500;800"], weight: 800, upper: false, perEm: 0.6 },
+  poppins: { display: `Poppins, ${sans}`, body: `Poppins, ${sans}`, css: ["Poppins:wght@400;500;800"], weight: 800, upper: false, perEm: 0.62 },
+  lora: { display: "Lora, Georgia, serif", body: "Lora, Georgia, serif", css: ["Lora:wght@400;500;700"], weight: 700, upper: false, perEm: 0.55 },
 };
-const font = fonts[theme.font];
+const font = fonts[theme.font] ?? fonts.anton;
+const fontLink = font.css.length
+  ? `https://fonts.googleapis.com/css2?${font.css.map((f) => `family=${f}`).join("&")}&display=swap`
+  : "";
 
-// The hero name fills the screen's width: shorter names sit bigger. k is its
-// size in vw, unitless, so CSS can divide by it to shrink the name into the bar.
+// k is the name's size in vw, without units, so CSS can divide by it to shrink
+// the name into the bar. On wide screens it's capped to stay on the screen.
 const length = store.store_name.length;
-const k = Math.min(30, Math.max(8, 165 / length));
-const animatedName = home && length <= 20;
+const k = Math.min(52, Math.max(7, 92 / (length * font.perEm)));
+const wideK = Math.min(k, 30);
+const animatedName = home && length <= 26;
 
 // Theme values reach this page only after the API's strict checks (#rrggbb).
-const tokens = `:root{--primary:${theme.primary_color};--accent:${theme.accent_color};--ink:${readableInk(theme.primary_color)};--on-primary:${onColor(theme.primary_color)};--font:${font.family};--k:${k.toFixed(2)}}`;
+const tokens = `:root{--ground:${theme.primary_color};--on:${onColor(theme.primary_color)};--flash:${theme.accent_color};--on-flash:${onColor(theme.accent_color)};--ink:${inkOnWhite(theme.primary_color)};--font:${font.body};--display:${font.display};--display-weight:${font.weight};--display-case:${font.upper ? "uppercase" : "none"};--k:${k.toFixed(2)};--wide-k:${wideK.toFixed(2)}}`;
 ---
 
 <!doctype html>
-<html lang="en" class:list={{ "has-wordmark": animatedName }}>
+<html lang="en" class:list={[plain ? "plain" : "flood", { "has-wordmark": animatedName }]}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>{title ? `${title} · ${store.store_name}` : store.store_name}</title>
     <meta name="description" content={description} />
-    <meta name="theme-color" content={theme.accent_color} />
+    <meta name="theme-color" content={theme.primary_color} />
     {refresh && <meta http-equiv="refresh" content={refresh} />}
     {
-      font.css && (
+      fontLink && (
         <>
           <link rel="preconnect" href="https://fonts.googleapis.com" />
           <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-          <link rel="stylesheet" href={`https://fonts.googleapis.com/css2?family=${font.css}&display=swap`} />
+          <link rel="stylesheet" href={fontLink} />
         </>
       )
     }
@@ -59,14 +68,20 @@ const tokens = `:root{--primary:${theme.primary_color};--accent:${theme.accent_c
       </a>
       <a class="bag" href="/bag">Bag <span class="bag-count" data-bag-count>{bagCount}</span></a>
     </header>
-    {animatedName && <a class="wordmark" href="/" aria-hidden="true" tabindex="-1">{store.store_name}</a>}
+    {
+      animatedName && (
+        <a class="wordmark" href="/" aria-hidden="true" tabindex="-1">
+          <span>{store.store_name}</span>
+        </a>
+      )
+    }
 
     <main><slot /></main>
 
     {
       !plain && (
         <footer class="foot">
-          <p class="foot-name" aria-hidden="true">{store.store_name}</p>
+          <p class:list={["foot-name", { "foot-name--long": length > 26 }]} aria-hidden="true">{store.store_name}</p>
         </footer>
       )
     }

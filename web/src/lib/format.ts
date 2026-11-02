@@ -26,11 +26,17 @@ function luminance(hex: string) {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
-// Large text needs 3:1 against the page. A seller's pale colour falls back to
-// near-black for text, and still shows up in the tiles.
-export function readableInk(hex: string) {
-  return (0.95 + 0.05) / (luminance(hex) + 0.05) >= 3 ? hex : "#16130f";
+const contrast = (a: number, b: number) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+
+const nearBlack = "#111111";
+
+// Text on a page flooded with this colour: whichever of black or white reads
+// better, which always clears 4.5:1, so any colour a seller picks stays legible.
+export function onColor(hex: string) {
+  const ground = luminance(hex);
+  return contrast(ground, 1) >= contrast(ground, luminance(nearBlack)) ? "#ffffff" : nearBlack;
 }
 
-// Text placed on a filled button of this colour.
-export const onColor = (hex: string) => (luminance(hex) > 0.4 ? "#16130f" : "#ffffff");
+// Text on the white bag and checkout pages: the store's colour if it reads well
+// there, otherwise near-black.
+export const inkOnWhite = (hex: string) => (contrast(luminance(hex), 1) >= 4.5 ? hex : nearBlack);

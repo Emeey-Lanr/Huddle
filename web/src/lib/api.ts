@@ -6,7 +6,7 @@ export type Theme = {
   banner_url: string;
   primary_color: string;
   accent_color: string;
-  font: "system" | "inter" | "poppins" | "lora";
+  font: "anton" | "bricolage" | "fraunces" | "system" | "inter" | "poppins" | "lora";
   sections: { banner: boolean; about: boolean };
 };
 

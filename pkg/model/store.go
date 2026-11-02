@@ -62,14 +62,14 @@ type StoreThemeSections struct {
 }
 
 // StoreThemeFonts are the fonts the template ships with.
-var StoreThemeFonts = []string{"system", "inter", "poppins", "lora"}
+var StoreThemeFonts = []string{"anton", "bricolage", "fraunces", "system", "inter", "poppins", "lora"}
 
 // DefaultStoreTheme is the look of a store nobody has themed yet.
 func DefaultStoreTheme() StoreTheme {
 	return StoreTheme{
 		PrimaryColor: "#111827",
 		AccentColor:  "#2563eb",
-		Font:         "system",
+		Font:         "anton",
 		Sections:     StoreThemeSections{Banner: true, About: true},
 	}
 }
