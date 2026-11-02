@@ -27,7 +27,32 @@ export type Product = {
   image_url?: string;
 };
 
-export type Cart = { items: { quantity: number }[] | null };
+export type CartItem = {
+  product_id: string;
+  product_name: string;
+  product_price: string;
+  currency: string;
+  quantity: number;
+};
+
+export type Cart = { items: CartItem[] | null };
+
+export type Order = {
+  id: string;
+  status: "pending" | "paid" | "fulfilled" | "cancelled" | "expired";
+  currency: string;
+  total: string;
+  name: string;
+  phone: string;
+  email: string;
+  delivery_method: "delivery" | "pickup";
+  address: string;
+  city: string;
+  state: string;
+  note: string;
+  items: { product_id: string; product_name: string; unit_price: string; quantity: number; line_total: string }[];
+  expires_at: string;
+};
 
 export class ApiError extends Error {
   constructor(
@@ -66,3 +91,32 @@ export const getProduct = (host: string, id: string) =>
 
 export const countItems = (cart: Cart) =>
   (cart.items ?? []).reduce((total, item) => total + item.quantity, 0);
+
+export const getCart = (host: string, cookie: string) => apiData<Cart>(host, "/cart", { headers: { cookie } });
+
+export const getOrder = (host: string, id: string) =>
+  apiData<Order>(host, `/storefront/orders/${encodeURIComponent(id)}`);
+
+export const placeOrder = (host: string, cookie: string, details: Record<string, string>) =>
+  apiData<Order>(host, "/storefront/checkout", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie },
+    body: JSON.stringify(details),
+  });
+
+// The shop's own address, as the shopper sees it, for Bachs to send them back to.
+export function shopOrigin(request: Request) {
+  const proto = request.headers.get("x-forwarded-proto") ?? new URL(request.url).protocol.replace(":", "");
+  return `${proto}://${request.headers.get("host")}`;
+}
+
+// Opens a Bachs checkout for the order and returns the page to send the shopper to.
+export async function startPayment(host: string, orderId: string, request: Request) {
+  const receipt = `${shopOrigin(request)}/orders/${encodeURIComponent(orderId)}`;
+  const payment = await apiData<{ checkout_url: string }>(host, `/storefront/orders/${encodeURIComponent(orderId)}/pay`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ success_url: `${receipt}?check=1`, cancel_url: receipt }),
+  });
+  return payment.checkout_url;
+}

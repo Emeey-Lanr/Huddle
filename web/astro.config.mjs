@@ -6,5 +6,12 @@ export default defineConfig({
   output: "server",
   adapter: node({ mode: "standalone" }),
   devToolbar: { enabled: false },
-  vite: { server: { allowedHosts: [".localhost", ".ngrok-free.dev"] } },
+  security: { checkOrigin: false }, // replaced by fromOtherSite in src/middleware.ts
+  vite: {
+    server: {
+      allowedHosts: [".localhost", ".ngrok-free.dev"],
+      // Development only: one ngrok address serves the website and Bachs webhooks.
+      proxy: { "/webhooks": "http://localhost:8080" },
+    },
+  },
 });

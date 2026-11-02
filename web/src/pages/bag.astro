@@ -1,0 +1,67 @@
+---
+import Shop from "../layouts/Shop.astro";
+import { getCart, getProduct } from "../lib/api";
+import { photo, price } from "../lib/format";
+
+const { host } = Astro.locals;
+const cookie = Astro.request.headers.get("cookie") ?? "";
+const cart = cookie.includes("cart_session=") ? await getCart(host, cookie).catch(() => null) : null;
+const items = cart?.items ?? [];
+
+// The cart holds no photos. A missing photo only costs the tile, never the bag.
+const details = await Promise.all(items.map((item) => getProduct(host, item.product_id).catch(() => null)));
+
+const total = items.reduce((sum, item) => sum + Number(item.product_price) * item.quantity, 0);
+const currency = items[0]?.currency ?? "NGN";
+const failed = Astro.url.searchParams.has("error");
+---
+
+<Shop title="Your bag" plain>
+  <section class="page">
+    <h1>Your bag</h1>
+    {failed && <p class="notice" role="alert">That many aren't available right now.</p>}
+    {
+      items.length === 0 ? (
+        <>
+          <p class="page-lead">Nothing here yet.</p>
+          <a class="button" href="/">Keep shopping</a>
+        </>
+      ) : (
+        <>
+          <ul class="lines">
+            {items.map((item, i) => {
+              const image = details[i]?.images[0]?.img_url;
+              const stock = details[i]?.product.stock_quantity;
+              return (
+                <li class="line">
+                  <a class="tile line-tile" href={`/products/${item.product_id}`}>
+                    {image ? (
+                      <img src={photo(image, 240)} alt="" width="120" height="150" loading="lazy" />
+                    ) : (
+                      <span class="tile-letter tile-letter--small" aria-hidden="true">{item.product_name.charAt(0)}</span>
+                    )}
+                  </a>
+                  <div class="line-text">
+                    <a href={`/products/${item.product_id}`}>{item.product_name}</a>
+                    <p>{price(String(Number(item.product_price) * item.quantity), item.currency)}</p>
+                    <form class="stepper" method="post" action="/api/bag">
+                      <input type="hidden" name="product_id" value={item.product_id} />
+                      <button name="quantity" value={item.quantity - 1} aria-label={item.quantity === 1 ? `Remove ${item.product_name}` : `One fewer ${item.product_name}`}>−</button>
+                      <span aria-label={`Quantity ${item.quantity}`}>{item.quantity}</span>
+                      <button name="quantity" value={item.quantity + 1} disabled={stock !== undefined && item.quantity >= stock} aria-label={`One more ${item.product_name}`}>+</button>
+                    </form>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          <div class="sum">
+            <span>Total</span>
+            <strong>{price(String(total), currency)}</strong>
+          </div>
+          <a class="button button--full" href="/checkout">Checkout</a>
+        </>
+      )
+    }
+  </section>
+</Shop>

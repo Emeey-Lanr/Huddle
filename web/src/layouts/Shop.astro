@@ -6,10 +6,12 @@ interface Props {
   title?: string;
   description?: string;
   home?: boolean;
+  plain?: boolean; // bag, checkout, orders: no decoration between shopper and paying
+  refresh?: string;
 }
 
 const { store, bagCount } = Astro.locals;
-const { title, description = store.store_description, home = false } = Astro.props;
+const { title, description = store.store_description, home = false, plain = false, refresh } = Astro.props;
 const { theme } = store;
 
 const fonts = {
@@ -38,6 +40,7 @@ const tokens = `:root{--primary:${theme.primary_color};--accent:${theme.accent_c
     <title>{title ? `${title} · ${store.store_name}` : store.store_name}</title>
     <meta name="description" content={description} />
     <meta name="theme-color" content={theme.accent_color} />
+    {refresh && <meta http-equiv="refresh" content={refresh} />}
     {
       font.css && (
         <>
@@ -54,15 +57,19 @@ const tokens = `:root{--primary:${theme.primary_color};--accent:${theme.accent_c
       <a class="bar-name" href="/">
         {theme.logo_url ? <img src={theme.logo_url} alt={store.store_name} height="28" /> : store.store_name}
       </a>
-      <span class="bag">Bag <span class="bag-count" data-bag-count>{bagCount}</span></span>
+      <a class="bag" href="/bag">Bag <span class="bag-count" data-bag-count>{bagCount}</span></a>
     </header>
     {animatedName && <a class="wordmark" href="/" aria-hidden="true" tabindex="-1">{store.store_name}</a>}
 
     <main><slot /></main>
 
-    <footer class="foot">
-      <p class="foot-name" aria-hidden="true">{store.store_name}</p>
-    </footer>
+    {
+      !plain && (
+        <footer class="foot">
+          <p class="foot-name" aria-hidden="true">{store.store_name}</p>
+        </footer>
+      )
+    }
     <p class="toast" role="status" data-toast></p>
 
     <script>

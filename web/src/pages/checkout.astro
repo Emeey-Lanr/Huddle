@@ -1,0 +1,125 @@
+---
+import Shop from "../layouts/Shop.astro";
+import { ApiError, getCart, placeOrder, startPayment } from "../lib/api";
+import { price } from "../lib/format";
+
+const { host } = Astro.locals;
+const cookie = Astro.request.headers.get("cookie") ?? "";
+
+const states = [
+  "Abia", "Adamawa", "Akwa Ibom", "Anambra", "Bauchi", "Bayelsa", "Benue", "Borno", "Cross River", "Delta",
+  "Ebonyi", "Edo", "Ekiti", "Enugu", "FCT Abuja", "Gombe", "Imo", "Jigawa", "Kaduna", "Kano", "Katsina", "Kebbi",
+  "Kogi", "Kwara", "Lagos", "Nasarawa", "Niger", "Ogun", "Ondo", "Osun", "Oyo", "Plateau", "Rivers", "Sokoto",
+  "Taraba", "Yobe", "Zamfara",
+];
+
+let values: Record<string, string> = { delivery_method: "delivery" };
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const form = await Astro.request.formData().catch(() => new FormData());
+  values = Object.fromEntries(
+    ["name", "phone", "email", "delivery_method", "address", "city", "state", "note"].map((key) => [
+      key,
+      String(form.get(key) ?? "").trim(),
+    ]),
+  );
+
+  // Hidden delivery fields can't be marked required in the form, so they're checked here.
+  const delivering = values.delivery_method === "delivery";
+  if (!values.name || !values.phone) error = "Add your name and phone number.";
+  else if (delivering && (!values.address || !values.city || !values.state)) error = "Add your full delivery address.";
+
+  if (!error) {
+    try {
+      const details = delivering ? values : { ...values, address: "", city: "", state: "" };
+      const order = await placeOrder(host, cookie, details);
+      // The order exists now. If payment can't open, its page offers "Pay now".
+      const destination = await startPayment(host, order.id, Astro.request).catch(() => `/orders/${order.id}?error=1`);
+      return Astro.redirect(destination, 303);
+    } catch (err) {
+      error =
+        err instanceof ApiError && err.message !== "Validation failed"
+          ? err.message
+          : "Check your details and try again.";
+    }
+  }
+}
+
+const cart = cookie.includes("cart_session=") ? await getCart(host, cookie).catch(() => null) : null;
+const items = cart?.items ?? [];
+if (items.length === 0) return Astro.redirect("/bag");
+
+const currency = items[0].currency;
+const total = items.reduce((sum, item) => sum + Number(item.product_price) * item.quantity, 0);
+const pickup = values.delivery_method === "pickup";
+---
+
+<Shop title="Checkout" plain>
+  <section class="page">
+    <h1>Checkout</h1>
+    {error && <p class="notice" role="alert">{error}</p>}
+
+    <form class="form" method="post" data-checkout>
+      <fieldset>
+        <legend>Your details</legend>
+        <label>Full name <input name="name" value={values.name} autocomplete="name" maxlength="250" required /></label>
+        <label>Phone number <input name="phone" value={values.phone} type="tel" inputmode="tel" autocomplete="tel" required /></label>
+        <label>Email, for your receipt (optional) <input name="email" value={values.email} type="email" autocomplete="email" maxlength="250" /></label>
+      </fieldset>
+
+      <fieldset>
+        <legend>How you'll get it</legend>
+        <div class="choice">
+          <label><input type="radio" name="delivery_method" value="delivery" checked={!pickup} /> <span>Delivery</span></label>
+          <label><input type="radio" name="delivery_method" value="pickup" checked={pickup} /> <span>Pickup</span></label>
+        </div>
+        <div class="address">
+          <label>Address <input name="address" value={values.address} autocomplete="street-address" /></label>
+          <label>City <input name="city" value={values.city} autocomplete="address-level2" maxlength="100" /></label>
+          <label>State
+            <select name="state" autocomplete="address-level1">
+              <option value="">Choose a state</option>
+              {states.map((state) => <option selected={values.state === state}>{state}</option>)}
+            </select>
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Note for the seller (optional)</legend>
+        <label class="sr-only" for="note">Note</label>
+        <textarea id="note" name="note" rows="3" maxlength="1000">{values.note}</textarea>
+      </fieldset>
+
+      <ul class="summary">
+        {
+          items.map((item) => (
+            <li>
+              <span>{item.quantity} × {item.product_name}</span>
+              <span>{price(String(Number(item.product_price) * item.quantity), item.currency)}</span>
+            </li>
+          ))
+        }
+      </ul>
+      <div class="sum">
+        <span>Total</span>
+        <strong>{price(String(total), currency)}</strong>
+      </div>
+      <button class="button button--full" type="submit">Pay {price(String(total), currency)}</button>
+      <p class="form-hint">You'll pay on a secure page, then come straight back here.</p>
+    </form>
+  </section>
+</Shop>
+
+<script>
+  // One order per tap: a slow network shouldn't invite a second one.
+  const form = document.querySelector<HTMLFormElement>("[data-checkout]");
+  form?.addEventListener("submit", () => {
+    const button = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Placing your order…";
+    }
+  });
+</script>

@@ -395,6 +395,271 @@ button {
   }
 }
 
+/* Bag, checkout and orders: plain and fast, one column at any width. */
+
+.page {
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 16px var(--gutter) 72px;
+}
+
+.page h1 {
+  margin-bottom: 20px;
+  font-size: clamp(32px, 9vw, 44px);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.035em;
+}
+
+.page-lead {
+  margin-bottom: 24px;
+  font-size: 18px;
+}
+
+.notice {
+  margin-bottom: 20px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  color: var(--ink);
+  background: var(--tile);
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  padding: 0 28px;
+  border-radius: 999px;
+  font-weight: 700;
+  color: var(--on-primary);
+  background: var(--primary);
+  transition: transform 0.2s var(--ease), opacity 0.2s;
+}
+
+.button:active {
+  transform: scale(0.98);
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.button--full {
+  width: 100%;
+}
+
+.text-link {
+  display: inline-block;
+  margin-top: 28px;
+  padding: 8px 0;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.lines {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.line {
+  display: flex;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.line:first-child {
+  padding-top: 0;
+}
+
+.line-tile {
+  flex: 0 0 96px;
+  border-radius: 10px;
+}
+
+.tile-letter--small {
+  font-size: 40px;
+}
+
+.line-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  font-weight: 500;
+}
+
+.line-text p {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  margin-top: auto;
+  padding-top: 8px;
+  margin-left: -12px;
+}
+
+.stepper button {
+  width: 44px;
+  height: 44px;
+  font-size: 20px;
+}
+
+.stepper button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.stepper span {
+  min-width: 24px;
+  text-align: center;
+  font-weight: 500;
+}
+
+.sum {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 18px 0;
+  font-size: 18px;
+}
+
+.form fieldset {
+  min-width: 0;
+  margin: 0 0 28px;
+  padding: 0;
+  border: 0;
+}
+
+.form legend {
+  padding: 0;
+  margin-bottom: 12px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.form label:not(.sr-only) {
+  display: block;
+  margin-bottom: 14px;
+  font-size: 15px;
+}
+
+/* 16px text stops iPhones zooming in when a field is tapped. */
+.form input:not([type="radio"]),
+.form select,
+.form textarea {
+  display: block;
+  width: 100%;
+  min-height: 52px;
+  margin-top: 6px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--ink) 34%, transparent);
+  border-radius: 10px;
+  font: inherit;
+  font-size: 16px;
+  color: var(--ink);
+  background: #fff;
+}
+
+.choice {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.form .choice label {
+  margin: 0;
+}
+
+.choice input {
+  position: absolute;
+  opacity: 0;
+}
+
+.choice span {
+  display: grid;
+  place-items: center;
+  min-height: 52px;
+  border: 1px solid color-mix(in srgb, var(--ink) 34%, transparent);
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 500;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.choice input:checked + span {
+  color: var(--on-primary);
+  border-color: var(--primary);
+  background: var(--primary);
+}
+
+.choice input:focus-visible + span {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
+/* Pickup needs no address. */
+.form:has(input[value="pickup"]:checked) .address {
+  display: none;
+}
+
+.form-hint {
+  margin-top: 12px;
+  font-size: 14px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.summary {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+
+.page form + .summary {
+  margin-top: 28px;
+}
+
+.summary li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.facts {
+  margin: 12px 0 0;
+}
+
+.facts div {
+  padding: 12px 0;
+}
+
+.facts dt {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.facts dd {
+  margin: 2px 0 0;
+}
+
+.facts-id {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
 /* Footer */
 
 .foot {
