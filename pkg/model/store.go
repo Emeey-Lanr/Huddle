@@ -15,6 +15,9 @@ type Stores struct {
 	StoreId string `json:"store_id" gorm:"column:store_id"`
 	// BachsAccountId is the seller's Bachs sub-account; never set from requests.
 	BachsAccountId *string `json:"-" gorm:"column:bachs_account_id"`
+	// Theme is JSON (StoreTheme). Read-only here so creating a store keeps the
+	// column's default; services.UpdateStoreTheme writes it.
+	Theme string `json:"-" gorm:"column:theme;->"`
 	CreatedAt time.Time `json:"created_at" gorm:"column:created_at"`
 	UpdatedAt time.Time `json:"updated_at" gorm:"column:updated_at"` 	
 }
@@ -30,9 +33,59 @@ type StoreResponse struct {
 
 // StorefrontStore is the public store info shoppers see.
 type StorefrontStore struct {
-	StoreId          string `json:"store_id"`
-	StoreName        string `json:"store_name"`
-	StoreDescription string `json:"store_description"`
+	StoreId          string     `json:"store_id"`
+	StoreName        string     `json:"store_name"`
+	StoreDescription string     `json:"store_description"`
+	Theme            StoreTheme `json:"theme"`
+}
+
+// StoreTheme is how a store's customer website looks. Every store runs the same
+// template; these settings are all that differ, so a bad value can't break
+// checkout. They end up in a public page, so services.UpdateStoreTheme checks
+// each one against a strict format.
+type StoreTheme struct {
+	LogoUrl      string            `json:"logo_url"`
+	BannerUrl    string            `json:"banner_url"`
+	PrimaryColor string            `json:"primary_color"`
+	AccentColor  string            `json:"accent_color"`
+	Font         string            `json:"font"`
+	Sections     StoreThemeSections `json:"sections"`
+}
+
+// StoreThemeSections says which optional parts of the shop home page show.
+type StoreThemeSections struct {
+	Banner bool `json:"banner"`
+	About  bool `json:"about"`
+}
+
+// StoreThemeFonts are the fonts the template ships with.
+var StoreThemeFonts = []string{"system", "inter", "poppins", "lora"}
+
+// DefaultStoreTheme is the look of a store nobody has themed yet.
+func DefaultStoreTheme() StoreTheme {
+	return StoreTheme{
+		PrimaryColor: "#111827",
+		AccentColor:  "#2563eb",
+		Font:         "system",
+		Sections:     StoreThemeSections{Banner: true, About: true},
+	}
+}
+
+// StoreThemeUpdate request. Missing fields are left unchanged; an empty
+// logo_url or banner_url removes the image.
+type StoreThemeUpdate struct {
+	LogoUrl      *string                   `json:"logo_url"`
+	BannerUrl    *string                   `json:"banner_url"`
+	PrimaryColor *string                   `json:"primary_color"`
+	AccentColor  *string                   `json:"accent_color"`
+	Font         *string                   `json:"font"`
+	Sections     *StoreThemeSectionsUpdate `json:"sections"`
+}
+
+// StoreThemeSectionsUpdate leaves missing fields unchanged.
+type StoreThemeSectionsUpdate struct {
+	Banner *bool `json:"banner"`
+	About  *bool `json:"about"`
 }
 
 // StoreDomains is a custom domain a store's storefront runs on.

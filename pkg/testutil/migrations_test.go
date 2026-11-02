@@ -20,6 +20,16 @@ func TestMigrations_DownThenUp(t *testing.T) {
 	}
 }
 
+func TestMigrations_StoreThemeColumn(t *testing.T) {
+	db := NewDB(t)
+	var n int64
+	db.Raw(`SELECT count(*) FROM information_schema.columns
+		WHERE table_schema = current_schema() AND table_name = 'stores' AND column_name = 'theme' AND data_type = 'jsonb'`).Scan(&n)
+	if n != 1 {
+		t.Error("stores.theme jsonb column missing")
+	}
+}
+
 func TestMigrations_IndexesExist(t *testing.T) {
 	db := NewDB(t)
 	want := []string{

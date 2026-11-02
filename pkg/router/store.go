@@ -23,6 +23,8 @@ func StoreRouter(r *gin.Engine, db *gorm.DB, rdb *redis.Client, domains *storedo
 		storeRoutes.GET("/stores", storeBase.List)
 		storeRoutes.GET("/:id", storeBase.Get)
 		storeRoutes.PUT("/:id", storeBase.Update)
+		storeRoutes.GET("/:id/theme", storeBase.GetTheme)
+		storeRoutes.PUT("/:id/theme", storeBase.UpdateTheme)
 		storeRoutes.POST("/:id/key", storeBase.RegenerateKey)
 		storeRoutes.GET("/:id/domains", storeBase.ListDomains)
 		storeRoutes.POST("/:id/domains", storeBase.AddDomain)

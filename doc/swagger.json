@@ -185,6 +185,10 @@
             "type": "integer",
             "example": 10
           },
+          "image_url": {
+            "type": "string",
+            "description": "One photo for product cards. Only on GET /storefront/products, and left out if the product has no images."
+          },
           "active": {
             "type": "boolean",
             "example": true
@@ -339,6 +343,53 @@
           "store_description": {
             "type": "string",
             "example": "Handmade ankara bags and accessories"
+          },
+          "theme": {
+            "$ref": "#/components/schemas/StoreTheme"
+          }
+        }
+      },
+      "StoreTheme": {
+        "type": "object",
+        "properties": {
+          "logo_url": {
+            "type": "string",
+            "description": "https link, or empty for no logo",
+            "example": "https://res.cloudinary.com/huddle/logo.png"
+          },
+          "banner_url": {
+            "type": "string",
+            "description": "https link, or empty for no banner"
+          },
+          "primary_color": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$",
+            "example": "#111827"
+          },
+          "accent_color": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$",
+            "example": "#2563eb"
+          },
+          "font": {
+            "type": "string",
+            "enum": [
+              "system",
+              "inter",
+              "poppins",
+              "lora"
+            ]
+          },
+          "sections": {
+            "type": "object",
+            "properties": {
+              "banner": {
+                "type": "boolean"
+              },
+              "about": {
+                "type": "boolean"
+              }
+            }
           }
         }
       },
@@ -1276,6 +1327,123 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/store/{id}/theme": {
+      "get": {
+        "tags": [
+          "Store"
+        ],
+        "summary": "Get your store's theme",
+        "description": "Settings nobody has changed show their defaults.",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StoreIdPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Theme",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Theme retrieved successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/StoreTheme"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Store"
+        ],
+        "summary": "Update your store's theme",
+        "description": "Send only the settings to change; missing ones are not changed. An empty logo_url or banner_url removes the image.",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StoreIdPath"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StoreTheme"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated theme",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Theme updated successfully"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/StoreTheme"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           }
         }
       }
