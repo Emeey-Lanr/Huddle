@@ -1,0 +1,546 @@
+/* Layout, then motion. Each store's colours arrive as --primary, --accent and
+   --ink; everything else is derived from them, so no two shops look alike. */
+
+:root {
+  --paper: color-mix(in srgb, var(--accent) 5%, #fbfaf6);
+  --tile: color-mix(in srgb, var(--accent) 16%, #efece4);
+  --line: color-mix(in srgb, var(--ink) 16%, transparent);
+  --muted: color-mix(in srgb, var(--ink) 62%, var(--paper));
+  --gutter: 16px;
+  --bar: 56px;
+  --target: 5.6; /* the shrunken name's size in vw */
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@media (min-width: 768px) {
+  :root {
+    --gutter: 28px;
+    --target: 2;
+    --k-max: 1;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  background: var(--paper);
+}
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--paper);
+  -webkit-font-smoothing: antialiased;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border: 0;
+  background: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Bar */
+
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--bar);
+  padding: 0 var(--gutter);
+  background: var(--paper);
+}
+
+.bar-name {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  max-width: 70vw;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.bag {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.bag-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  margin-left: 4px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--on-primary);
+  background: var(--primary);
+}
+
+/* The store name is the hero */
+
+.wordmark {
+  display: block;
+  padding: 0 var(--gutter);
+  font-size: calc(var(--k) * 1vw);
+  font-weight: 800;
+  line-height: 0.95;
+  letter-spacing: -0.045em;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+.hero {
+  padding: 28px var(--gutter) 0;
+}
+
+.hero-about {
+  max-width: 34ch;
+  font-size: 18px;
+  line-height: 1.35;
+}
+
+.hero-banner {
+  margin-top: 24px;
+  overflow: hidden;
+  border-radius: 20px;
+  aspect-ratio: 4 / 5;
+  background: var(--tile);
+}
+
+.hero-banner img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+@media (min-width: 768px) {
+  .hero-banner {
+    aspect-ratio: 16 / 8;
+  }
+}
+
+/* Products. Every fifth piece runs full width, so the page has a rhythm
+   instead of an even catalogue grid. */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px 12px;
+  padding: 40px var(--gutter) 64px;
+}
+
+.grid > :nth-child(5n + 1) {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 768px) {
+  .grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 44px 20px;
+  }
+
+  .grid > :nth-child(5n + 1) {
+    grid-column: span 2;
+  }
+
+  /* Wide enough to match the height of the 4:5 card beside it. */
+  .grid > :nth-child(5n + 1) .tile {
+    aspect-ratio: 8 / 5;
+  }
+}
+
+.card {
+  position: relative;
+  min-width: 0;
+}
+
+.card-link {
+  display: block;
+}
+
+/* One crop and one tinted tile for every photo, so phone pictures sit together. */
+.tile {
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  aspect-ratio: 4 / 5;
+  border-radius: 14px;
+  background: var(--tile);
+}
+
+.tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.tile-letter {
+  font-size: 96px;
+  font-weight: 800;
+  line-height: 1;
+  color: color-mix(in srgb, var(--accent) 45%, var(--tile));
+}
+
+.card-text {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 12px;
+  padding-top: 10px;
+}
+
+.card-text h2 {
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.card-text p {
+  font-size: 15px;
+  color: var(--muted);
+}
+
+.quick-add {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  font-size: 24px;
+  line-height: 1;
+  background: var(--paper);
+  transition: transform 0.25s var(--ease), background-color 0.25s, color 0.25s;
+}
+
+.quick-add:active {
+  transform: scale(0.88);
+}
+
+.quick-add.is-added {
+  color: var(--on-primary);
+  background: var(--primary);
+  transform: rotate(90deg);
+}
+
+.empty {
+  padding: 64px var(--gutter);
+  font-size: 22px;
+}
+
+/* Product page */
+
+.gallery {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.gallery::-webkit-scrollbar {
+  display: none;
+}
+
+.gallery .tile {
+  flex: 0 0 100%;
+  border-radius: 0;
+  scroll-snap-align: start;
+}
+
+.pdp-text {
+  padding: 24px var(--gutter) 120px;
+}
+
+.pdp-text h1 {
+  font-size: clamp(32px, 9vw, 56px);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.035em;
+}
+
+.pdp-price {
+  margin-top: 12px;
+  font-size: 20px;
+}
+
+.pdp-stock {
+  margin-top: 4px;
+  font-size: 15px;
+  color: var(--muted);
+}
+
+.pdp-about {
+  max-width: 56ch;
+  margin-top: 24px;
+  white-space: pre-line;
+}
+
+/* Thumb reach: the main action stays at the bottom of the screen. */
+.buy {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px var(--gutter) max(10px, env(safe-area-inset-bottom));
+  background: var(--paper);
+  border-top: 1px solid var(--line);
+}
+
+.buy-price {
+  font-weight: 500;
+}
+
+.buy-button {
+  min-width: 170px;
+  min-height: 52px;
+  padding: 0 24px;
+  border-radius: 999px;
+  font-weight: 700;
+  color: var(--on-primary);
+  background: var(--primary);
+  transition: transform 0.2s var(--ease), opacity 0.2s;
+}
+
+.buy-button:active {
+  transform: scale(0.97);
+}
+
+.buy-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+@media (min-width: 768px) {
+  .pdp {
+    display: grid;
+    grid-template-columns: 55% 1fr;
+    align-items: start;
+    gap: 0 40px;
+  }
+
+  .gallery {
+    display: block;
+    overflow: visible;
+  }
+
+  .gallery .tile + .tile {
+    margin-top: 6px;
+  }
+
+  .pdp-text {
+    position: sticky;
+    top: var(--bar);
+    padding: 40px var(--gutter) 140px 0;
+  }
+
+  .buy {
+    left: 55%;
+    right: 0;
+    border-top: 0;
+    padding-left: 40px;
+  }
+}
+
+/* Footer */
+
+.foot {
+  overflow: hidden;
+  padding: 40px var(--gutter) 24px;
+  border-top: 1px solid var(--line);
+}
+
+.foot-name {
+  font-size: calc(var(--k) * 1vw);
+  font-weight: 800;
+  line-height: 0.95;
+  letter-spacing: -0.045em;
+  white-space: nowrap;
+}
+
+.pdp ~ * {
+  padding-bottom: 96px;
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 88px;
+  z-index: 20;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  padding: 10px 16px;
+  border-radius: 12px;
+  font-size: 15px;
+  color: var(--paper);
+  background: var(--ink);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 12px);
+  transition: opacity 0.2s, transform 0.25s var(--ease);
+}
+
+.toast.is-showing {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* ---------------------------------------------------------------------------
+   Motion. Only transform and opacity, driven by the browser rather than by
+   JavaScript, so a weak phone never drops frames. A browser without these
+   features shows the same page, still and complete.
+--------------------------------------------------------------------------- */
+
+@view-transition {
+  navigation: auto;
+}
+
+::view-transition-group(*) {
+  animation-duration: 0.42s;
+  animation-timing-function: var(--ease);
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.22s;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: scroll()) {
+    /* The giant name shrinks into the bar as the page scrolls. */
+    .has-wordmark .bar-name {
+      visibility: hidden;
+    }
+
+    .has-wordmark .hero {
+      padding-top: calc(var(--k) * 0.95vw + 28px);
+    }
+
+    .wordmark {
+      position: fixed;
+      top: 0;
+      left: 0;
+      z-index: 11;
+      padding: 0;
+      transform-origin: 0 0;
+      animation: name-shrink linear both;
+      animation-timeline: scroll(root);
+      /* Done before the banner reaches the bar, at any name length or width. */
+      animation-range: 0 calc(var(--k) * 2.2vw + 40px);
+    }
+
+    @keyframes name-shrink {
+      from {
+        transform: translate(var(--gutter), calc(var(--bar) + 4px));
+      }
+      to {
+        transform: translate(var(--gutter), 14px) scale(calc(var(--target) / var(--k)));
+      }
+    }
+
+    /* The banner settles as it arrives. */
+    .hero-banner img {
+      animation: banner-settle linear both;
+      animation-timeline: view();
+      animation-range: entry 10% cover 60%;
+    }
+
+    @keyframes banner-settle {
+      from {
+        transform: scale(1.14);
+      }
+      to {
+        transform: scale(1);
+      }
+    }
+
+    /* Pieces rise in as they enter the screen. */
+    .card {
+      animation: rise linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 40%;
+    }
+
+    @keyframes rise {
+      from {
+        opacity: 0;
+        transform: translateY(28px);
+      }
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+
+    .foot-name {
+      animation: rise linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 80%;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @view-transition {
+    navigation: none;
+  }
+
+  *,
+  ::view-transition-group(*) {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

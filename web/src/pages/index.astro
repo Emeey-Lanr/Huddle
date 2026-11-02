@@ -1,0 +1,44 @@
+---
+import ProductCard from "../components/ProductCard.astro";
+import Shop from "../layouts/Shop.astro";
+import { getProducts } from "../lib/api";
+import { photo, photoSet } from "../lib/format";
+
+const { store, host } = Astro.locals;
+const { items } = await getProducts(host);
+const { sections, banner_url: banner } = store.theme;
+---
+
+<Shop home>
+  <section class="hero">
+    <h1 class="sr-only">{store.store_name}</h1>
+    {
+      sections.about && <p class="hero-about">{store.store_description}</p>
+    }
+    {
+      sections.banner && banner && (
+        <div class="hero-banner">
+          <img
+            src={photo(banner, 1200)}
+            srcset={photoSet(banner, [640, 960, 1600])}
+            sizes="100vw"
+            alt=""
+            width="1200"
+            height="1500"
+            fetchpriority="high"
+          />
+        </div>
+      )
+    }
+  </section>
+
+  {
+    items.length > 0 ? (
+      <section class="grid" aria-label="Products">
+        {items.map((product, i) => <ProductCard product={product} eager={i < 3} />)}
+      </section>
+    ) : (
+      <p class="empty">New pieces are on the way.</p>
+    )
+  }
+</Shop>

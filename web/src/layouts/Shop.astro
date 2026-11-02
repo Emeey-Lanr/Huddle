@@ -1,0 +1,72 @@
+---
+import "../styles/shop.css";
+import { onColor, readableInk } from "../lib/format";
+
+interface Props {
+  title?: string;
+  description?: string;
+  home?: boolean;
+}
+
+const { store, bagCount } = Astro.locals;
+const { title, description = store.store_description, home = false } = Astro.props;
+const { theme } = store;
+
+const fonts = {
+  system: { family: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif', css: "" },
+  inter: { family: "Inter, system-ui, sans-serif", css: "Inter:wght@400;500;800" },
+  poppins: { family: "Poppins, system-ui, sans-serif", css: "Poppins:wght@400;500;800" },
+  lora: { family: "Lora, Georgia, serif", css: "Lora:wght@400;500;700" },
+};
+const font = fonts[theme.font];
+
+// The hero name fills the screen's width: shorter names sit bigger. k is its
+// size in vw, unitless, so CSS can divide by it to shrink the name into the bar.
+const length = store.store_name.length;
+const k = Math.min(30, Math.max(8, 165 / length));
+const animatedName = home && length <= 20;
+
+// Theme values reach this page only after the API's strict checks (#rrggbb).
+const tokens = `:root{--primary:${theme.primary_color};--accent:${theme.accent_color};--ink:${readableInk(theme.primary_color)};--on-primary:${onColor(theme.primary_color)};--font:${font.family};--k:${k.toFixed(2)}}`;
+---
+
+<!doctype html>
+<html lang="en" class:list={{ "has-wordmark": animatedName }}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>{title ? `${title} · ${store.store_name}` : store.store_name}</title>
+    <meta name="description" content={description} />
+    <meta name="theme-color" content={theme.accent_color} />
+    {
+      font.css && (
+        <>
+          <link rel="preconnect" href="https://fonts.googleapis.com" />
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+          <link rel="stylesheet" href={`https://fonts.googleapis.com/css2?family=${font.css}&display=swap`} />
+        </>
+      )
+    }
+    <style set:html={tokens}></style>
+  </head>
+  <body>
+    <header class="bar">
+      <a class="bar-name" href="/">
+        {theme.logo_url ? <img src={theme.logo_url} alt={store.store_name} height="28" /> : store.store_name}
+      </a>
+      <span class="bag">Bag <span class="bag-count" data-bag-count>{bagCount}</span></span>
+    </header>
+    {animatedName && <a class="wordmark" href="/" aria-hidden="true" tabindex="-1">{store.store_name}</a>}
+
+    <main><slot /></main>
+
+    <footer class="foot">
+      <p class="foot-name" aria-hidden="true">{store.store_name}</p>
+    </footer>
+    <p class="toast" role="status" data-toast></p>
+
+    <script>
+      import "../scripts/bag.ts";
+    </script>
+  </body>
+</html>
