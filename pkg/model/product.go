@@ -66,6 +66,9 @@ type StorefrontProductQuery struct {
 	MaxPrice float64 `form:"max_price"`
 	Sort     string  `form:"sort"`
 	Order    string  `form:"order"`
+	// Group is a group's slug; Ungrouped lists products in no group. Use one.
+	Group     string `form:"group"`
+	Ungrouped bool   `form:"ungrouped"`
 }
 
 type ProductListResponse struct {

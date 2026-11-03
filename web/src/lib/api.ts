@@ -80,8 +80,17 @@ export async function apiData<T>(host: string, path: string, init?: RequestInit)
 
 export const getStore = (host: string) => apiData<Store>(host, "/storefront/store");
 
-export const getProducts = (host: string) =>
-  apiData<{ items: Product[] }>(host, "/storefront/products?limit=24&sort=created_at&order=desc");
+export type Group = { name: string; slug: string; products: number };
+
+// Only groups with something on sale, in the seller's order.
+export const getGroups = (host: string) => apiData<Group[]>(host, "/storefront/groups");
+
+// filter is "group=<slug>" or "ungrouped=true"; none lists every product.
+export const getProducts = (host: string, filter = "") =>
+  apiData<{ items: Product[]; total: number }>(
+    host,
+    `/storefront/products?limit=24&sort=created_at&order=desc${filter ? `&${filter}` : ""}`,
+  );
 
 export const getProduct = (host: string, id: string) =>
   apiData<{ product: Product; images: { img_url: string }[] }>(

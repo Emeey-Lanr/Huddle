@@ -232,6 +232,22 @@ button {
   }
 }
 
+/* A store with two or more groups shows each as a shelf: its name, then its
+   products in the same grid. */
+.shelf + .shelf {
+  margin-top: 40px;
+}
+
+.shelf-name {
+  padding: 22px var(--gutter) 12px;
+  font-family: var(--display);
+  font-size: clamp(30px, 8vw, 56px);
+  font-weight: var(--display-weight);
+  line-height: 1.05;
+  text-transform: var(--display-case);
+  letter-spacing: -0.01em;
+}
+
 .card {
   position: relative;
   min-width: 0;

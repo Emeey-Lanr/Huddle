@@ -1,12 +1,28 @@
 ---
 import ProductCard from "../components/ProductCard.astro";
 import Shop from "../layouts/Shop.astro";
-import { getProducts } from "../lib/api";
+import { getGroups, getProducts, type Product } from "../lib/api";
 import { photo, photoSet } from "../lib/format";
 
 const { store, host } = Astro.locals;
-const { items } = await getProducts(host);
 const { sections, banner_url: banner } = store.theme;
+
+// With two or more groups, each gets a heading with its products under it, and
+// anything ungrouped comes last under "More". Otherwise, one plain grid.
+const groups = await getGroups(host).catch(() => []);
+type Shelf = { name: string; slug: string; items: Product[] };
+let shelves: Shelf[] = [];
+let items: Product[] = [];
+if (groups.length >= 2) {
+  const [rest, ...lists] = await Promise.all([
+    getProducts(host, "ungrouped=true"),
+    ...groups.map((g) => getProducts(host, `group=${encodeURIComponent(g.slug)}`)),
+  ]);
+  shelves = groups.map((g, i) => ({ name: g.name, slug: g.slug, items: lists[i].items }));
+  if (rest.items.length) shelves.push({ name: "More", slug: "more", items: rest.items });
+} else {
+  items = (await getProducts(host)).items;
+}
 ---
 
 <Shop home>
@@ -33,7 +49,16 @@ const { sections, banner_url: banner } = store.theme;
   </section>
 
   {
-    items.length > 0 ? (
+    shelves.length > 0 ? (
+      shelves.map((shelf, s) => (
+        <section class="shelf" aria-labelledby={`shelf-${shelf.slug}`} id={shelf.slug}>
+          <h2 class="shelf-name" id={`shelf-${shelf.slug}`}>{shelf.name}</h2>
+          <div class="grid">
+            {shelf.items.map((product, i) => <ProductCard product={product} eager={s === 0 && i < 3} />)}
+          </div>
+        </section>
+      ))
+    ) : items.length > 0 ? (
       <section class="grid" aria-label="Products">
         {items.map((product, i) => <ProductCard product={product} eager={i < 3} />)}
       </section>

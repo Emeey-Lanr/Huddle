@@ -35,6 +35,7 @@ func StorefrontRoutes(r *gin.Engine, db *gorm.DB, rdb *redis.Client, domains *st
 
 	{
 		group.GET("/store", storefront.Store)
+		group.GET("/groups", storefront.Groups)
 		group.GET("/products", storefront.Products)
 		group.GET("/products/:id", storefront.Product)
 		// Guests can check out; a customer token, if sent, links the order to the account.

@@ -812,6 +812,55 @@
           }
         }
       },
+      "ProductGroup": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "grp_3f2a…"
+          },
+          "name": {
+            "type": "string",
+            "example": "Ankara Bags"
+          },
+          "slug": {
+            "type": "string",
+            "example": "ankara-bags"
+          },
+          "position": {
+            "type": "integer",
+            "example": 0
+          },
+          "product_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "StorefrontGroup": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Ankara Bags"
+          },
+          "slug": {
+            "type": "string",
+            "example": "ankara-bags"
+          },
+          "products": {
+            "type": "integer",
+            "description": "Products on sale in the group",
+            "example": 6
+          }
+        }
+      },
       "StoreDomain": {
         "type": "object",
         "properties": {
@@ -1656,6 +1705,499 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/store/{id}/groups": {
+      "get": {
+        "tags": [
+          "Store"
+        ],
+        "summary": "List the store's product groups",
+        "description": "Groups sort products for shoppers (\"Shoes\", \"Bags\"), in the order the shop shows them. Each lists the ids of its products, newest first.",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StoreIdPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Groups retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Groups retrieved successfully"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ProductGroup"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Store"
+        ],
+        "summary": "Create a product group",
+        "description": "Creates an empty group at the end of the list. Names are up to 40 characters and unique in the store, ignoring case. The group's `slug` comes from its name (`Ìlá Caps` becomes `ila-caps`). A store can have at most 30 groups. On the shop, a store with two or more groups that have products on sale shows each as a heading with its products under it.",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StoreIdPath"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 40,
+                    "example": "Ankara Bags"
+                  },
+                  "position": {
+                    "type": "integer",
+                    "description": "Lower comes first on the shop. Defaults to the end of the list."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Group created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Group created"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ProductGroup"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/store/{id}/groups/{groupId}": {
+      "put": {
+        "tags": [
+          "Store"
+        ],
+        "summary": "Rename or move a product group",
+        "description": "Send `name`, `position` or both. A new name gives the group a new `slug`, so old links to it stop working.",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StoreIdPath"
+          },
+          {
+            "name": "groupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "grp_3f2a…"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 40,
+                    "example": "Ankara Bags"
+                  },
+                  "position": {
+                    "type": "integer",
+                    "description": "Lower comes first on the shop. Defaults to the end of the list."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Group updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Group updated"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ProductGroup"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Store"
+        ],
+        "summary": "Delete a product group",
+        "description": "The group's products stay on sale, ungrouped.",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StoreIdPath"
+          },
+          {
+            "name": "groupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "grp_3f2a…"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Group deleted; its products are now ungrouped",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Group deleted; its products are now ungrouped"
+                    },
+                    "data": {
+                      "type": "object",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/store/{id}/groups/{groupId}/products": {
+      "post": {
+        "tags": [
+          "Store"
+        ],
+        "summary": "Put products in a group",
+        "description": "A product is in one group at most, so this moves products out of any other group. Every id must be one of this store's products, or nothing changes (404).",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StoreIdPath"
+          },
+          {
+            "name": "groupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "grp_3f2a…"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "product_ids"
+                ],
+                "properties": {
+                  "product_ids": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "items": {
+                      "type": "string"
+                    },
+                    "example": [
+                      "prod_4c84…"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Products added to the group",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Products added to the group"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ProductGroup"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/store/{id}/groups/{groupId}/products/{productId}": {
+      "delete": {
+        "tags": [
+          "Store"
+        ],
+        "summary": "Take a product out of a group",
+        "description": "The product stays on sale, ungrouped. 404 if it isn't in this group.",
+        "security": [
+          {
+            "AdminAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StoreIdPath"
+          },
+          {
+            "name": "groupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "grp_3f2a…"
+            }
+          },
+          {
+            "name": "productId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Product removed from the group",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Product removed from the group"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ProductGroup"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/storefront/groups": {
+      "get": {
+        "tags": [
+          "Storefront"
+        ],
+        "summary": "List the groups shoppers can browse",
+        "description": "Only groups with at least one product on sale, in the seller's order, with how many are on sale. Use a group's `slug` with `GET /storefront/products?group=<slug>`.",
+        "security": [
+          {
+            "StoreKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Groups retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Groups retrieved successfully"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/StorefrontGroup"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidStoreKey"
           }
         }
       }
@@ -2953,6 +3495,22 @@
           }
         ],
         "parameters": [
+          {
+            "name": "group",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Only this group's products, by its `slug`. Unknown slug: 404."
+          },
+          {
+            "name": "ungrouped",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Only products in no group. Can't be used with `group` (400)."
+          },
           {
             "name": "page",
             "in": "query",

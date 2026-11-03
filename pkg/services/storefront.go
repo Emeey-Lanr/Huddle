@@ -40,6 +40,18 @@ func ListStorefrontProducts(db *gorm.DB, storeId uuid.UUID, sq model.StorefrontP
 	}
 
 	query := helper.GetAllProductQueryChain(db, storeId, q)
+	switch {
+	case sq.Group != "" && sq.Ungrouped:
+		return nil, &utility.AppError{StatusCode: http.StatusBadRequest, Message: "Use group or ungrouped, not both", Err: errors.New("group and ungrouped")}
+	case sq.Group != "":
+		groupId, appErr := storefrontGroupId(db, storeId, sq.Group)
+		if appErr != nil {
+			return nil, appErr
+		}
+		query = query.Where("group_id = ?", groupId)
+	case sq.Ungrouped:
+		query = query.Where("group_id IS NULL")
+	}
 	var total int64
 	if err := query.Session(&gorm.Session{}).Count(&total).Error; err != nil {
 		return nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err: err}
