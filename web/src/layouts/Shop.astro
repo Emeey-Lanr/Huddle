@@ -1,4 +1,19 @@
 ---
+// Fonts are served from this site. Each file is only downloaded when a page uses
+// that font and needs its characters, so a store loads just its own.
+import "@fontsource/anton/400.css";
+import "@fontsource/archivo/400.css";
+import "@fontsource/archivo/500.css";
+import "@fontsource/archivo/700.css";
+import "@fontsource/inter/400.css";
+import "@fontsource/inter/500.css";
+import "@fontsource/inter/800.css";
+import "@fontsource/poppins/400.css";
+import "@fontsource/poppins/500.css";
+import "@fontsource/poppins/800.css";
+import "@fontsource/lora/400.css";
+import "@fontsource/lora/500.css";
+import "@fontsource/lora/700.css";
 import "../styles/shop.css";
 import { inkOnWhite, onColor } from "../lib/format";
 
@@ -17,16 +32,13 @@ const { theme } = store;
 // perEm is roughly how wide a letter is, so a name can fill the screen's width.
 const sans = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 const fonts = {
-  anton: { display: `Anton, Impact, ${sans}`, body: `Archivo, ${sans}`, css: ["Anton", "Archivo:wght@400;500;700"], weight: 400, upper: true, perEm: 0.46 },
-  system: { display: sans, body: sans, css: [], weight: 800, upper: false, perEm: 0.58 },
-  inter: { display: `Inter, ${sans}`, body: `Inter, ${sans}`, css: ["Inter:wght@400;500;800"], weight: 800, upper: false, perEm: 0.6 },
-  poppins: { display: `Poppins, ${sans}`, body: `Poppins, ${sans}`, css: ["Poppins:wght@400;500;800"], weight: 800, upper: false, perEm: 0.62 },
-  lora: { display: "Lora, Georgia, serif", body: "Lora, Georgia, serif", css: ["Lora:wght@400;500;700"], weight: 700, upper: false, perEm: 0.55 },
+  anton: { display: `Anton, Impact, ${sans}`, body: `Archivo, ${sans}`, weight: 400, upper: true, perEm: 0.46 },
+  system: { display: sans, body: sans, weight: 800, upper: false, perEm: 0.58 },
+  inter: { display: `Inter, ${sans}`, body: `Inter, ${sans}`, weight: 800, upper: false, perEm: 0.6 },
+  poppins: { display: `Poppins, ${sans}`, body: `Poppins, ${sans}`, weight: 800, upper: false, perEm: 0.62 },
+  lora: { display: "Lora, Georgia, serif", body: "Lora, Georgia, serif", weight: 700, upper: false, perEm: 0.55 },
 };
 const font = fonts[theme.font] ?? fonts.anton;
-const fontLink = font.css.length
-  ? `https://fonts.googleapis.com/css2?${font.css.map((f) => `family=${f}`).join("&")}&display=swap`
-  : "";
 
 // k is the name's size in vw, without units, so CSS can divide by it to shrink
 // the name into the bar. On wide screens it's capped to stay on the screen.
@@ -48,15 +60,6 @@ const tokens = `:root{--ground:${theme.primary_color};--on:${onColor(theme.prima
     <meta name="description" content={description} />
     <meta name="theme-color" content={theme.primary_color} />
     {refresh && <meta http-equiv="refresh" content={refresh} />}
-    {
-      fontLink && (
-        <>
-          <link rel="preconnect" href="https://fonts.googleapis.com" />
-          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-          <link rel="stylesheet" href={fontLink} />
-        </>
-      )
-    }
     <style set:html={tokens}></style>
   </head>
   <body>
