@@ -52,6 +52,7 @@ export type Order = {
   note: string;
   items: { product_id: string; product_name: string; unit_price: string; quantity: number; line_total: string }[];
   expires_at: string;
+  created_at: string;
 };
 
 export class ApiError extends Error {
@@ -106,12 +107,35 @@ export const getCart = (host: string, cookie: string) => apiData<Cart>(host, "/c
 export const getOrder = (host: string, id: string) =>
   apiData<Order>(host, `/storefront/orders/${encodeURIComponent(id)}`);
 
-export const placeOrder = (host: string, cookie: string, details: Record<string, string>) =>
+// With a customer token the order is saved to their account.
+export const placeOrder = (host: string, cookie: string, details: Record<string, string>, token?: string) =>
   apiData<Order>(host, "/storefront/checkout", {
     method: "POST",
-    headers: { "Content-Type": "application/json", cookie },
+    headers: { "Content-Type": "application/json", cookie, ...(token ? bearer(token) : {}) },
     body: JSON.stringify(details),
   });
+
+export type Customer = { id: string; name: string; email: string; created_at: string };
+
+const bearer = (token: string) => ({ Authorization: `Bearer ${token}` });
+
+// Sign-in and sign-up are rate limited per address, so the API is told the
+// shopper's, not this server's (it only believes it from TRUSTED_PROXIES).
+const signInRoute = (path: string) => (host: string, storeId: string, shopperIp: string, details: Record<string, string>) =>
+  apiData<{ token: string; customer: Customer }>(host, path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Forwarded-For": shopperIp },
+    body: JSON.stringify({ ...details, store_id: storeId }),
+  });
+
+export const signIn = signInRoute("/customer/signin");
+export const signUp = signInRoute("/customer/signup");
+
+export const getProfile = (host: string, token: string) =>
+  apiData<Customer>(host, "/customer/profile", { headers: bearer(token) });
+
+export const getMyOrders = (host: string, token: string) =>
+  apiData<{ items: Order[] | null; total: number }>(host, "/customer/orders?limit=50", { headers: bearer(token) });
 
 // The shop's own address, as the shopper sees it, for Bachs to send them back to.
 export function shopOrigin(request: Request) {

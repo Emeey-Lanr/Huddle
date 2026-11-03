@@ -5,5 +5,6 @@ declare namespace App {
     host: string;
     store: import("./lib/api").Store;
     bagCount: number;
+    signedIn: boolean;
   }
 }

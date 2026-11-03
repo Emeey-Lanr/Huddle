@@ -1,0 +1,52 @@
+---
+import Shop from "../layouts/Shop.astro";
+import { ApiError, signIn } from "../lib/api";
+import { nextPath, saveToken } from "../lib/session";
+
+const { host, store } = Astro.locals;
+const next = nextPath(Astro.url.searchParams.get("next"));
+let email = "";
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const form = await Astro.request.formData().catch(() => new FormData());
+  email = String(form.get("email") ?? "").trim();
+  const password = String(form.get("password") ?? "");
+
+  if (!email || !password) error = "Add your email and password.";
+  else {
+    try {
+      const { token } = await signIn(host, store.store_id, Astro.clientAddress, { email, password });
+      saveToken(Astro.cookies, Astro.request, token);
+      return Astro.redirect(next, 303);
+    } catch (err) {
+      const status = err instanceof ApiError ? err.status : 0;
+      error =
+        status === 401 ? "That email and password don't match."
+        : status === 429 ? "Too many tries. Wait a minute and try again."
+        : status === 400 ? "Check your email and try again."
+        : "We couldn't sign you in. Try again in a moment.";
+    }
+  }
+} else if (Astro.locals.signedIn) {
+  return Astro.redirect(next);
+}
+
+const query = next === "/account" ? "" : `?next=${encodeURIComponent(next)}`;
+---
+
+<Shop title="Sign in" plain>
+  <section class="page">
+    <h1>Sign in</h1>
+    <p class="page-lead">See your orders and check out faster.</p>
+    {error && <p class="notice" role="alert">{error}</p>}
+
+    <form class="form" method="post">
+      <label>Email <input name="email" value={email} type="email" autocomplete="email" maxlength="250" required /></label>
+      <label>Password <input name="password" type="password" autocomplete="current-password" required /></label>
+      <button class="button button--full" type="submit">Sign in</button>
+    </form>
+    <p class="form-switch">New here? <a href={`/signup${query}`}>Create an account</a></p>
+    <p class="form-hint">You don't need an account to buy.</p>
+  </section>
+</Shop>

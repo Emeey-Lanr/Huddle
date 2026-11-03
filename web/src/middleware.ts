@@ -1,5 +1,6 @@
 import { defineMiddleware } from "astro:middleware";
 import { ApiError, countItems, getCart, getStore } from "./lib/api";
+import { readToken } from "./lib/session";
 
 // The address decides the store. Only bare local or tunnel addresses, which
 // can't name one, fall back to DEV_STORE_HOST.
@@ -39,6 +40,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
     throw err;
   }
 
+  // Only whether a token is there: pages that need the account check it with the API.
+  context.locals.signedIn = readToken(context.cookies) !== "";
   context.locals.bagCount = 0;
   const cookie = context.request.headers.get("cookie") ?? "";
   if (cookie.includes("cart_session=")) {

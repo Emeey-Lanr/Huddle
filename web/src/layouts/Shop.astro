@@ -25,7 +25,7 @@ interface Props {
   refresh?: string;
 }
 
-const { store, bagCount } = Astro.locals;
+const { store, bagCount, signedIn } = Astro.locals;
 const { title, description = store.store_description, home = false, plain = false, refresh } = Astro.props;
 const { theme } = store;
 
@@ -67,7 +67,10 @@ const tokens = `:root{--ground:${theme.primary_color};--on:${onColor(theme.prima
       <a class="bar-name" href="/">
         {theme.logo_url ? <img src={theme.logo_url} alt={store.store_name} height="28" /> : store.store_name}
       </a>
-      <a class="bag" href="/bag">Bag <span class="bag-count" data-bag-count>{bagCount}</span></a>
+      <nav class="bar-links">
+        <a class="bar-link" href={signedIn ? "/account" : "/signin"}>{signedIn ? "Account" : "Sign in"}</a>
+        <a class="bag" href="/bag">Bag <span class="bag-count" data-bag-count>{bagCount}</span></a>
+      </nav>
     </header>
     {
       animatedName && (
