@@ -215,45 +215,20 @@ button {
   }
 }
 
-/* Products sit in a ruled grid, edge to edge, like a printed catalogue. Every
-   fifth runs full width; a last piece with a gap beside it fills the row. */
+/* Products sit in even rows of equal tiles, edge to edge, ruled like a printed
+   catalogue: two across on phones, three on wider screens. Each card draws its
+   own rule, so a short last row leaves a blank space instead of a filled one. */
 
 .grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1px;
-  background: var(--line);
-  border-block: 1px solid var(--line);
-}
-
-.grid > :nth-child(5n + 1),
-.grid > :last-child:nth-child(5n + 2),
-.grid > :last-child:nth-child(5n + 4) {
-  grid-column: 1 / -1;
+  padding-block: 1px;
 }
 
 @media (min-width: 768px) {
   .grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .grid > :nth-child(n) {
-    grid-column: auto;
-  }
-
-  .grid > :nth-child(5n + 1),
-  .grid > :last-child:nth-child(5n + 4) {
-    grid-column: span 2;
-  }
-
-  .grid > :last-child:nth-child(5n + 1),
-  .grid > :last-child:nth-child(5n + 3) {
-    grid-column: 1 / -1;
-  }
-
-  /* Wide enough to match the height of the 4:5 card beside it. */
-  .grid > :nth-child(5n + 1) .tile {
-    aspect-ratio: 8 / 5;
   }
 }
 
@@ -261,6 +236,7 @@ button {
   position: relative;
   min-width: 0;
   background: var(--bg);
+  box-shadow: 0 0 0 1px var(--line);
 }
 
 .card-link {
