@@ -109,7 +109,15 @@ func Check(getenv func(string) string) (problems, warnings []string) {
 		}
 	}
 
+	base := getenv("STOREFRONT_BASE_DOMAIN")
+	if strings.ContainsAny(base, ":/ ") {
+		fail("STOREFRONT_BASE_DOMAIN must be a bare domain like example.com, with no https:// or path")
+	}
+
 	if prod {
+		if base == "" {
+			warn("STOREFRONT_BASE_DOMAIN is not set: stores can't be reached at <slug>.<domain>, only on custom domains")
+		}
 		if getenv("BACHS_API_KEY") == "" || getenv("BACHS_WEBHOOK_SECRET") == "" {
 			fail("BACHS_API_KEY and BACHS_WEBHOOK_SECRET must be set in production: shoppers can't pay without them")
 		}

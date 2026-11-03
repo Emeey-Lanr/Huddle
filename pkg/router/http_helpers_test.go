@@ -3,8 +3,10 @@ package router
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"huddle/pkg/testutil"
@@ -16,10 +18,13 @@ import (
 // server is the full Huddle router backed by a fresh Postgres schema and an
 // in-memory Redis.
 type server struct {
-	t  *testing.T
-	r  *gin.Engine
-	db *gorm.DB
+	t    *testing.T
+	r    *gin.Engine
+	db   *gorm.DB
+	addr string // this test's client address
 }
+
+var servers atomic.Uint32
 
 func newServer(t *testing.T) *server {
 	t.Helper()
@@ -27,7 +32,11 @@ func newServer(t *testing.T) *server {
 	t.Setenv("SECRET_KEY", "test-secret")
 	db := testutil.NewDB(t)
 	_, rdb := testutil.NewRedis(t)
-	return &server{t: t, r: RoutesSetup(db, rdb), db: db}
+	// The rate limiter is shared by the whole test run and counts per IP, so
+	// each test is its own client: on a fast run they'd otherwise hit its limit.
+	n := servers.Add(1)
+	addr := fmt.Sprintf("10.%d.%d.1:1234", n>>8&255, n&255)
+	return &server{t: t, r: RoutesSetup(db, rdb), db: db, addr: addr}
 }
 
 type envelope struct {
@@ -45,6 +54,7 @@ func (s *server) do(method, path, token string, body any) (int, envelope) {
 		json.NewEncoder(&buf).Encode(body)
 	}
 	req := httptest.NewRequest(method, path, &buf)
+	req.RemoteAddr = s.addr
 	req.Header.Set("Content-Type", "application/json")
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
@@ -111,6 +121,7 @@ func (s *server) request(method, path string, headers map[string]string, cookies
 		json.NewEncoder(&buf).Encode(body)
 	}
 	req := httptest.NewRequest(method, path, &buf)
+	req.RemoteAddr = s.addr
 	req.Header.Set("Content-Type", "application/json")
 	for k, v := range headers {
 		req.Header.Set(k, v)

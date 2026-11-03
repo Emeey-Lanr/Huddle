@@ -1,0 +1,47 @@
+---
+import type { Product } from "../lib/api";
+import { photo, photoSet, price } from "../lib/format";
+
+interface Props {
+  product: Product;
+  eager?: boolean;
+}
+
+const { product, eager = false } = Astro.props;
+const soldOut = product.stock_quantity <= 0;
+const sizes = "(min-width: 768px) 33vw, 50vw";
+---
+
+<article class="card">
+  <a class="card-link" href={`/products/${product.id}`}>
+    <div class="tile" style={`view-transition-name:${product.id}`}>
+      {
+        product.image_url ? (
+          <img
+            src={photo(product.image_url, 640)}
+            srcset={photoSet(product.image_url, [320, 640, 960])}
+            sizes={sizes}
+            alt={product.name}
+            width="640"
+            height="800"
+            loading={eager ? "eager" : "lazy"}
+            decoding="async"
+          />
+        ) : (
+          <span class="tile-letter" aria-hidden="true">{product.name.charAt(0)}</span>
+        )
+      }
+    </div>
+    <div class="card-text">
+      <h2>{product.name}</h2>
+      <p>{soldOut ? "Sold out" : price(product.price, product.currency)}</p>
+    </div>
+  </a>
+  {
+    !soldOut && (
+      <button class="quick-add" type="button" data-add={product.id} aria-label={`Add ${product.name} to bag`}>
+        <span aria-hidden="true">+</span>
+      </button>
+    )
+  }
+</article>

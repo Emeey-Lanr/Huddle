@@ -1,0 +1,69 @@
+---
+import ProductCard from "../components/ProductCard.astro";
+import Shop from "../layouts/Shop.astro";
+import { getGroups, getProducts, type Product } from "../lib/api";
+import { photo, photoSet } from "../lib/format";
+
+const { store, host } = Astro.locals;
+const { sections, banner_url: banner } = store.theme;
+
+// With two or more groups, each gets a heading with its products under it, and
+// anything ungrouped comes last under "More". Otherwise, one plain grid.
+const groups = await getGroups(host).catch(() => []);
+type Shelf = { name: string; slug: string; items: Product[] };
+let shelves: Shelf[] = [];
+let items: Product[] = [];
+if (groups.length >= 2) {
+  const [rest, ...lists] = await Promise.all([
+    getProducts(host, "ungrouped=true"),
+    ...groups.map((g) => getProducts(host, `group=${encodeURIComponent(g.slug)}`)),
+  ]);
+  shelves = groups.map((g, i) => ({ name: g.name, slug: g.slug, items: lists[i].items }));
+  if (rest.items.length) shelves.push({ name: "More", slug: "more", items: rest.items });
+} else {
+  items = (await getProducts(host)).items;
+}
+---
+
+<Shop home>
+  <section class="hero">
+    <h1 class:list={store.store_name.length > 26 ? "hero-name" : "sr-only"}>{store.store_name}</h1>
+    {
+      sections.about && <p class="hero-about">{store.store_description}</p>
+    }
+    {
+      sections.banner && banner && (
+        <div class="hero-banner">
+          <img
+            src={photo(banner, 1200)}
+            srcset={photoSet(banner, [640, 960, 1600])}
+            sizes="100vw"
+            alt=""
+            width="1200"
+            height="1500"
+            fetchpriority="high"
+          />
+        </div>
+      )
+    }
+  </section>
+
+  {
+    shelves.length > 0 ? (
+      shelves.map((shelf, s) => (
+        <section class="shelf" aria-labelledby={`shelf-${shelf.slug}`} id={shelf.slug}>
+          <h2 class="shelf-name" id={`shelf-${shelf.slug}`}>{shelf.name}</h2>
+          <div class="grid">
+            {shelf.items.map((product, i) => <ProductCard product={product} eager={s === 0 && i < 3} />)}
+          </div>
+        </section>
+      ))
+    ) : items.length > 0 ? (
+      <section class="grid" aria-label="Products">
+        {items.map((product, i) => <ProductCard product={product} eager={i < 3} />)}
+      </section>
+    ) : (
+      <p class="empty">New pieces are on the way.</p>
+    )
+  }
+</Shop>

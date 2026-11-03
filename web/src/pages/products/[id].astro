@@ -1,0 +1,63 @@
+---
+import Shop from "../../layouts/Shop.astro";
+import { ApiError, getProduct } from "../../lib/api";
+import { photo, photoSet, price } from "../../lib/format";
+
+const { host } = Astro.locals;
+
+let data;
+try {
+  data = await getProduct(host, Astro.params.id ?? "");
+} catch (err) {
+  if (err instanceof ApiError && err.status === 404) return Astro.redirect("/");
+  throw err;
+}
+
+const { product, images } = data;
+const soldOut = product.stock_quantity <= 0;
+const lowStock = !soldOut && product.stock_quantity <= 3;
+const cost = price(product.price, product.currency);
+---
+
+<Shop title={product.name} description={product.description}>
+  <article class="pdp">
+    <div class="gallery" tabindex="0" aria-label="Product photos">
+      {
+        images.length > 0 ? (
+          images.map((image, i) => (
+            <div class="tile" style={i === 0 ? `view-transition-name:${product.id}` : undefined}>
+              <img
+                src={photo(image.img_url, 960)}
+                srcset={photoSet(image.img_url, [640, 960, 1400])}
+                sizes="(min-width: 768px) 55vw, 100vw"
+                alt={i === 0 ? product.name : ""}
+                width="960"
+                height="1200"
+                loading={i === 0 ? "eager" : "lazy"}
+                fetchpriority={i === 0 ? "high" : undefined}
+              />
+            </div>
+          ))
+        ) : (
+          <div class="tile" style={`view-transition-name:${product.id}`}>
+            <span class="tile-letter" aria-hidden="true">{product.name.charAt(0)}</span>
+          </div>
+        )
+      }
+    </div>
+
+    <div class="pdp-text">
+      <h1>{product.name}</h1>
+      <p class="pdp-price">{cost}</p>
+      {lowStock && <p class="pdp-stock">Only {product.stock_quantity} left</p>}
+      <p class="pdp-about">{product.description}</p>
+    </div>
+
+    <div class="buy">
+      <span class="buy-price">{soldOut ? "Sold out" : cost}</span>
+      <button class="buy-button" type="button" data-add={product.id} disabled={soldOut}>
+        <span data-label>{soldOut ? "Sold out" : "Add to bag"}</span>
+      </button>
+    </div>
+  </article>
+</Shop>

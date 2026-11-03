@@ -34,6 +34,11 @@ func CreateStore(db *gorm.DB, req model.Stores, adminId uuid.UUID, email string)
 
 	storeId := fmt.Sprintf("str-%s", strings.ReplaceAll(utility.GenerateUUID().String(), "-", ""))
 
+	slug, err := newStoreSlug(db, req.StoreName)
+	if err != nil {
+		return nil, nil, &utility.AppError{StatusCode: http.StatusInternalServerError, Message: "Internal Server Error", Err: err}
+	}
+
 	data := model.Stores{
 		ID:               utility.GenerateUUID(),
 		AdminId:          adminId,
@@ -41,6 +46,7 @@ func CreateStore(db *gorm.DB, req model.Stores, adminId uuid.UUID, email string)
 		StoreDescription: req.StoreDescription,
 		ApiKey:           hashedApiKey,
 		StoreId:          storeId,
+		Slug:             slug,
 	}
 
 	if err := db.Create(&data).Error; err != nil {
@@ -57,6 +63,7 @@ func toStoreResponse(s model.Stores) model.StoreResponse {
 		StoreId:          s.StoreId,
 		StoreName:        s.StoreName,
 		StoreDescription: s.StoreDescription,
+		Slug:             s.Slug,
 		CreatedAt:        s.CreatedAt,
 		UpdatedAt:        s.UpdatedAt,
 	}
@@ -111,6 +118,12 @@ func UpdateStore(db *gorm.DB, publicStoreId string, adminId uuid.UUID, req model
 	}
 	if req.StoreDescription != "" {
 		updates["store_description"] = req.StoreDescription
+	}
+	if req.Slug != "" && req.Slug != store.Slug {
+		if appErr := checkStoreSlug(db, req.Slug, store.ID); appErr != nil {
+			return nil, appErr
+		}
+		updates["slug"] = req.Slug
 	}
 
 	if len(updates) > 0 {

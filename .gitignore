@@ -2,3 +2,9 @@
 tmp/
 # Build output
 *.exe
+
+# Customer website
+web/node_modules/
+web/dist/
+web/.astro/
+web/.env

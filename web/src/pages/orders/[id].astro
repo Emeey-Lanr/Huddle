@@ -1,0 +1,82 @@
+---
+import Shop from "../../layouts/Shop.astro";
+import { ApiError, getOrder } from "../../lib/api";
+import { price } from "../../lib/format";
+
+const { host } = Astro.locals;
+
+let order;
+try {
+  order = await getOrder(host, Astro.params.id ?? "");
+} catch (err) {
+  if (err instanceof ApiError && err.status === 404) return Astro.redirect("/");
+  throw err;
+}
+
+// Back from paying: Bachs tells the API by webhook, which can take a few
+// seconds, so the page rechecks itself for about a minute.
+const checks = Number(Astro.url.searchParams.get("check")) || 0;
+const pending = order.status === "pending";
+const unexpired = new Date(order.expires_at) > new Date();
+const checking = pending && checks > 0 && checks <= 12;
+const refresh = checking ? `5;url=/orders/${order.id}?check=${checks + 1}` : undefined;
+const failed = Astro.url.searchParams.has("error");
+
+const headings = {
+  pending: checking ? "Confirming your payment" : "Waiting for payment",
+  paid: "Thank you, your order is in",
+  fulfilled: "Your order is complete",
+  cancelled: "This order was cancelled",
+  expired: "This order expired",
+};
+---
+
+<Shop title="Your order" plain refresh={refresh}>
+  <section class="page">
+    <h1>{headings[order.status]}</h1>
+    {failed && <p class="notice" role="alert">We couldn't open the payment page. Try again in a moment.</p>}
+    {checking && <p class="page-lead" role="status">This usually takes a few seconds.</p>}
+    {order.status === "paid" && <p class="page-lead">The seller has your order and will contact you on {order.phone}.</p>}
+    {order.status === "expired" && <p class="page-lead">It wasn't paid in time, so the items went back on sale.</p>}
+    {
+      pending && unexpired && !checking && (
+        <form method="post" action="/api/pay">
+          <input type="hidden" name="order_id" value={order.id} />
+          <button class="button button--full">Pay {price(order.total, order.currency)}</button>
+          <p class="form-hint">Items are held until {new Date(order.expires_at).toLocaleTimeString("en-NG", { hour: "numeric", minute: "2-digit", timeZone: "Africa/Lagos" })}.</p>
+        </form>
+      )
+    }
+
+    <ul class="summary">
+      {
+        order.items.map((item) => (
+          <li>
+            <span>{item.quantity} × {item.product_name}</span>
+            <span>{price(item.line_total, order.currency)}</span>
+          </li>
+        ))
+      }
+    </ul>
+    <div class="sum">
+      <span>Total</span>
+      <strong>{price(order.total, order.currency)}</strong>
+    </div>
+
+    <dl class="facts">
+      <div>
+        <dt>{order.delivery_method === "pickup" ? "Pickup" : "Delivery to"}</dt>
+        <dd>
+          {order.name}
+          {order.delivery_method === "delivery" && <><br />{order.address}<br />{order.city}, {order.state}</>}
+        </dd>
+      </div>
+      <div>
+        <dt>Order number</dt>
+        <dd class="facts-id">{order.id}</dd>
+      </div>
+    </dl>
+
+    <a class="text-link" href="/">Back to the shop</a>
+  </section>
+</Shop>

@@ -59,6 +59,30 @@ func HTTPSHost(origin string) (string, bool) {
 	return strings.ToLower(host), true
 }
 
+// CleanHost turns a Host-style value into a bare lowercase hostname:
+// "Chiomas-Bags.huddle.ng:4321" becomes "chiomas-bags.huddle.ng".
+func CleanHost(host string) string {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	return strings.TrimSuffix(host, ".")
+}
+
+// SlugFromHost returns the store slug in a cleaned host, or false if the host
+// isn't exactly one label under baseDomain (STOREFRONT_BASE_DOMAIN).
+func SlugFromHost(host, baseDomain string) (string, bool) {
+	baseDomain = CleanHost(baseDomain)
+	if baseDomain == "" {
+		return "", false
+	}
+	slug, ok := strings.CutSuffix(host, "."+baseDomain)
+	if !ok || slug == "" || strings.Contains(slug, ".") {
+		return "", false
+	}
+	return slug, true
+}
+
 // OriginAllowed reports whether origin is in allowList, a comma-separated list
 // of exact origins ("https://chiomasbags.com") or subdomain wildcards
 // ("https://*.huddle.ng"), as in CORS_ALLOWED_ORIGINS.

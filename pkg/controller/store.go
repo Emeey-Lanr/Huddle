@@ -136,6 +136,45 @@ func (b *StoreBase) Update(c *gin.Context) {
 	response.Success(c, "Store updated successfully", store)
 }
 
+func (b *StoreBase) GetTheme(c *gin.Context) {
+	adminId, ok := adminUUID(c)
+	if !ok {
+		return
+	}
+
+	theme, serviceErr := services.GetStoreTheme(b.Db, c.Param("id"), adminId)
+	if serviceErr != nil {
+		response.Error(c, serviceErr.StatusCode, serviceErr.Message, serviceErr.Err)
+		return
+	}
+
+	response.Success(c, "Theme retrieved successfully", theme)
+}
+
+func (b *StoreBase) UpdateTheme(c *gin.Context) {
+	adminId, ok := adminUUID(c)
+	if !ok {
+		return
+	}
+	storeId := c.Param("id")
+
+	var req model.StoreThemeUpdate
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, "Invalid request payload", err)
+		return
+	}
+
+	theme, serviceErr := services.UpdateStoreTheme(b.Db, storeId, adminId, req)
+	if serviceErr != nil {
+		audit.LogEvent(c.Request.Context(), "STORE_THEME_UPDATED", adminId.String(), storeId, "FAILED", map[string]interface{}{"error": serviceErr.Message})
+		response.Error(c, serviceErr.StatusCode, serviceErr.Message, serviceErr.Err)
+		return
+	}
+
+	audit.LogEvent(c.Request.Context(), "STORE_THEME_UPDATED", adminId.String(), storeId, "SUCCESS", nil)
+	response.Success(c, "Theme updated successfully", theme)
+}
+
 func (b *StoreBase) RegenerateKey(c *gin.Context) {
 	adminId, ok := adminUUID(c)
 	if !ok {

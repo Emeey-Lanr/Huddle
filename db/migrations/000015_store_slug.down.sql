@@ -1,0 +1,3 @@
+DROP INDEX IF EXISTS stores_slug_unique;
+ALTER TABLE stores DROP CONSTRAINT IF EXISTS stores_slug_format;
+ALTER TABLE stores DROP COLUMN IF EXISTS slug;

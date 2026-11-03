@@ -22,12 +22,23 @@ func prodEnv(overrides map[string]string) func(string) string {
 		"APP_ENV": "production", "SECRET_KEY": strings.Repeat("s", 40), "DB_SSLMODE": "require",
 		"BACHS_API_KEY": "sk", "BACHS_WEBHOOK_SECRET": "whsec", "TRUSTED_PROXIES": "10.0.0.0/8",
 		"CORS_ALLOWED_ORIGINS": "https://*.huddle.ng", "SMTP_HOST": "smtp.example.com", "SMTP_FROM": "Huddle <orders@huddle.ng>",
-		"CLOUDINARY_URL": "cloudinary://k:s@cloud",
+		"CLOUDINARY_URL": "cloudinary://k:s@cloud", "STOREFRONT_BASE_DOMAIN": "huddle.ng",
 	}
 	for k, v := range overrides {
 		base[k] = v
 	}
 	return env(base)
+}
+
+func TestCheck_StorefrontBaseDomain(t *testing.T) {
+	for _, bad := range []string{"https://huddle.ng", "huddle.ng/", "huddle.ng:443", "huddle ng"} {
+		if problems, _ := Check(env(map[string]string{"STOREFRONT_BASE_DOMAIN": bad})); !hasMessage(problems, "STOREFRONT_BASE_DOMAIN") {
+			t.Errorf("%q: problems %v", bad, problems)
+		}
+	}
+	if _, warnings := Check(prodEnv(map[string]string{"STOREFRONT_BASE_DOMAIN": ""})); !hasMessage(warnings, "STOREFRONT_BASE_DOMAIN") {
+		t.Errorf("unset in production: warnings %v", warnings)
+	}
 }
 
 func hasMessage(list []string, part string) bool {
