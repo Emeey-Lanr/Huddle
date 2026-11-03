@@ -1,6 +1,7 @@
 ---
 import Shop from "../layouts/Shop.astro";
-import { ApiError, getCart, placeOrder, startPayment } from "../lib/api";
+import { ApiError, getCart, getProfile, placeOrder, startPayment, type Customer } from "../lib/api";
+import { clearToken, readToken } from "../lib/session";
 import { price } from "../lib/format";
 
 const { host } = Astro.locals;
@@ -15,6 +16,21 @@ const states = [
 
 let values: Record<string, string> = { delivery_method: "delivery" };
 let error = "";
+
+// Signed in: the order is saved to the account, and its details fill the form.
+// A token the API no longer takes is dropped, and the shopper checks out as a guest.
+let token = readToken(Astro.cookies);
+let customer: Customer | null = null;
+if (token) {
+  try {
+    customer = await getProfile(host, token);
+  } catch (err) {
+    if (!(err instanceof ApiError && err.status < 500)) throw err;
+    clearToken(Astro.cookies);
+    token = "";
+  }
+}
+if (customer) values = { ...values, name: customer.name, email: customer.email };
 
 if (Astro.request.method === "POST") {
   const form = await Astro.request.formData().catch(() => new FormData());
@@ -33,7 +49,7 @@ if (Astro.request.method === "POST") {
   if (!error) {
     try {
       const details = delivering ? values : { ...values, address: "", city: "", state: "" };
-      const order = await placeOrder(host, cookie, details);
+      const order = await placeOrder(host, cookie, details, token || undefined);
       // The order exists now. If payment can't open, its page offers "Pay now".
       const destination = await startPayment(host, order.id, Astro.request).catch(() => `/orders/${order.id}?error=1`);
       return Astro.redirect(destination, 303);
@@ -59,6 +75,15 @@ const pickup = values.delivery_method === "pickup";
   <section class="page">
     <h1>Checkout</h1>
     {error && <p class="notice" role="alert">{error}</p>}
+    {
+      customer ? (
+        <p class="page-lead">Signed in as {customer.email}. This order will be saved to your account.</p>
+      ) : (
+        <p class="page-lead">
+          Checking out as a guest. <a class="inline-link" href="/signin?next=/checkout">Sign in</a> to save it to your account.
+        </p>
+      )
+    }
 
     <form class="form" method="post" data-checkout>
       <fieldset>

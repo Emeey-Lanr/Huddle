@@ -1,0 +1,65 @@
+---
+import Shop from "../layouts/Shop.astro";
+import { ApiError, getMyOrders, getProfile } from "../lib/api";
+import { price } from "../lib/format";
+import { clearToken, readToken } from "../lib/session";
+
+const { host } = Astro.locals;
+const token = readToken(Astro.cookies);
+if (!token) return Astro.redirect("/signin");
+
+let profile, orders;
+try {
+  [profile, orders] = await Promise.all([getProfile(host, token), getMyOrders(host, token)]);
+} catch (err) {
+  // An expired or unknown token: sign in again.
+  if (err instanceof ApiError && (err.status === 401 || err.status === 403 || err.status === 404)) {
+    clearToken(Astro.cookies);
+    return Astro.redirect("/signin");
+  }
+  throw err;
+}
+
+const items = orders.items ?? [];
+const statuses = {
+  pending: "Waiting for payment",
+  paid: "Paid",
+  fulfilled: "Complete",
+  cancelled: "Cancelled",
+  expired: "Expired",
+};
+const day = (iso: string) =>
+  new Date(iso).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric", timeZone: "Africa/Lagos" });
+---
+
+<Shop title="Your account" plain>
+  <section class="page">
+    <h1>Hello, {profile.name.split(" ")[0]}</h1>
+    <p class="page-lead">{profile.email}</p>
+
+    <h2 class="page-heading">Your orders</h2>
+    {
+      items.length === 0 ? (
+        <p class="notice">No orders yet. Orders you place while signed in show up here.</p>
+      ) : (
+        <ul class="history">
+          {items.map((order) => (
+            <li>
+              <a href={`/orders/${order.id}`}>
+                <span>
+                  {order.items.map((item) => `${item.quantity} × ${item.product_name}`).join(", ")}
+                  <small>{day(order.created_at)} · {statuses[order.status]}</small>
+                </span>
+                <strong>{price(order.total, order.currency)}</strong>
+              </a>
+            </li>
+          ))}
+        </ul>
+      )
+    }
+
+    <form method="post" action="/api/signout">
+      <button class="text-link" type="submit">Sign out</button>
+    </form>
+  </section>
+</Shop>

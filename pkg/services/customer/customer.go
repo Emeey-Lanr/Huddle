@@ -72,8 +72,9 @@ func Signin(db *gorm.DB, rdb *redis.Client, req model.CustomerSigninReq) (*strin
 		return nil, nil, helperErr
 	}
 
+	// Emails are unique per store ignoring case (customers_store_email_unique), so match the same way.
 	var customer model.Customers
-	err := db.Where("store_id = ? AND email = ?", *internalStoreId, req.Email).First(&customer).Error
+	err := db.Where("store_id = ? AND lower(email) = lower(?)", *internalStoreId, req.Email).First(&customer).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil, &utility.AppError{StatusCode: http.StatusUnauthorized, Message: "Invalid credentials", Err: errors.New("invalid credentials")}

@@ -1,0 +1,52 @@
+---
+import Shop from "../layouts/Shop.astro";
+import { ApiError, signUp } from "../lib/api";
+import { nextPath, saveToken } from "../lib/session";
+
+const { host, store } = Astro.locals;
+const next = nextPath(Astro.url.searchParams.get("next"));
+const query = next === "/account" ? "" : `?next=${encodeURIComponent(next)}`;
+let values = { name: "", email: "" };
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const form = await Astro.request.formData().catch(() => new FormData());
+  values = { name: String(form.get("name") ?? "").trim(), email: String(form.get("email") ?? "").trim() };
+  const password = String(form.get("password") ?? "");
+
+  if (!values.name || !values.email) error = "Add your name and email.";
+  else if (password.length < 6) error = "Use a password of at least 6 characters.";
+  else {
+    try {
+      const { token } = await signUp(host, store.store_id, Astro.clientAddress, { ...values, password });
+      saveToken(Astro.cookies, Astro.request, token);
+      return Astro.redirect(next, 303);
+    } catch (err) {
+      const status = err instanceof ApiError ? err.status : 0;
+      error =
+        status === 409 ? "There's already an account with that email. Sign in instead."
+        : status === 429 ? "Too many tries. Wait a minute and try again."
+        : status === 400 ? "Check your details and try again."
+        : "We couldn't create your account. Try again in a moment.";
+    }
+  }
+} else if (Astro.locals.signedIn) {
+  return Astro.redirect(next);
+}
+---
+
+<Shop title="Create an account" plain>
+  <section class="page">
+    <h1>Create an account</h1>
+    <p class="page-lead">Keep your orders in one place and check out faster.</p>
+    {error && <p class="notice" role="alert">{error}</p>}
+
+    <form class="form" method="post">
+      <label>Full name <input name="name" value={values.name} autocomplete="name" maxlength="250" required /></label>
+      <label>Email <input name="email" value={values.email} type="email" autocomplete="email" maxlength="250" required /></label>
+      <label>Password, at least 6 characters <input name="password" type="password" autocomplete="new-password" minlength="6" required /></label>
+      <button class="button button--full" type="submit">Create account</button>
+    </form>
+    <p class="form-switch">Have an account? <a href={`/signin${query}`}>Sign in</a></p>
+  </section>
+</Shop>

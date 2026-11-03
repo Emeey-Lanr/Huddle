@@ -117,7 +117,7 @@ button {
 }
 
 .bar-name {
-  max-width: 70vw;
+  max-width: 55vw;
   overflow: hidden;
   font-family: var(--display);
   font-size: 20px;
@@ -125,6 +125,20 @@ button {
   text-transform: var(--display-case);
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+.bar-links {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.bar-link {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 15px;
+  font-weight: 500;
 }
 
 .bag {
@@ -708,6 +722,49 @@ button {
   gap: 16px;
   padding: 12px 0;
   border-bottom: 1px solid var(--line);
+}
+
+.form-switch {
+  margin-top: 20px;
+  text-align: center;
+}
+
+.inline-link,
+.form-switch a {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.page-heading {
+  margin-bottom: 12px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.history {
+  margin: 0 0 28px;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+
+.history a {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.history small {
+  display: block;
+  margin-top: 2px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.history strong {
+  white-space: nowrap;
 }
 
 .facts {
